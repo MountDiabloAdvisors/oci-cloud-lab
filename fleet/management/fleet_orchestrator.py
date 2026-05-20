@@ -199,12 +199,12 @@ bash $HOME/cloud-lab/payload/keepalive/install.sh $HOME/.config/cloud-lab/{role}
 
 # ── ntfy ──────────────────────────────────────────────────────────────────────
 
-def ntfy(topic: str, title: str, message: str, tags: str = "white_check_mark") -> None:
+def ntfy(topic: str, title: str, message: str, tags: str = "white_check_mark", server: str = "https://ntfy.sh") -> None:
     if not topic:
         return
     try:
         req = urllib.request.Request(
-            f"https://ntfy.sh/{topic}",
+            f"{server.rstrip('/')}/{topic}",
             data=message.encode("utf-8"),
             headers={"Title": title, "Tags": tags},
             method="POST",
@@ -259,8 +259,9 @@ def check_and_repair_fleet(fleet: list[dict[str, Any]], env: dict[str, str]) -> 
         log("ERROR: OCI_COMPARTMENT_ID not set.")
         return False
 
-    ntfy_topic = env.get("NOTIFY_NTFY_TOPIC", "")
-    fleet_name = env.get("FLEET_NAME", "cloud-lab")
+    ntfy_topic  = env.get("NOTIFY_NTFY_TOPIC", "")
+    ntfy_server = env.get("NOTIFY_NTFY_SERVER", "https://ntfy.sh")
+    fleet_name  = env.get("FLEET_NAME", "cloud-lab")
     all_healthy = True
 
     for vm in fleet:
@@ -294,7 +295,7 @@ def check_and_repair_fleet(fleet: list[dict[str, Any]], env: dict[str, str]) -> 
             public_ip = get_public_ip(name, compartment_id)
         except Exception as exc:
             log(f"Could not get public IP for {name}: {exc}")
-            ntfy(ntfy_topic, f"{fleet_name}: {name} launched (IP unknown)", vm.get("notes", ""), tags="rocket")
+            ntfy(ntfy_topic, f"{fleet_name}: {name} launched (IP unknown)", vm.get("notes", ""), tags="rocket", server=ntfy_server)
             continue
 
         log(f"{name} public IP: {public_ip}")
@@ -302,10 +303,10 @@ def check_and_repair_fleet(fleet: list[dict[str, Any]], env: dict[str, str]) -> 
 
         if ok:
             ntfy(ntfy_topic, f"{fleet_name}: {name} is live",
-                 f"{name} launched and configured. IP: {public_ip}", tags="rocket,white_check_mark")
+                 f"{name} launched and configured. IP: {public_ip}", tags="rocket,white_check_mark", server=ntfy_server)
         else:
             ntfy(ntfy_topic, f"{fleet_name}: {name} launched but first-contact failed",
-                 f"IP: {public_ip} — SSH in and check.", tags="warning")
+                 f"IP: {public_ip} — SSH in and check.", tags="warning", server=ntfy_server)
 
     return all_healthy
 

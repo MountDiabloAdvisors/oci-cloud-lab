@@ -73,8 +73,9 @@ def main() -> None:
     env = parse_env_file(env_file)
     env.update(os.environ)
 
-    topic = env.get("NOTIFY_NTFY_TOPIC", "")
-    fleet_name = env.get("FLEET_NAME", "Cloud Lab")
+    topic       = env.get("NOTIFY_NTFY_TOPIC", "")
+    ntfy_server = env.get("NOTIFY_NTFY_SERVER", "https://ntfy.sh")
+    fleet_name  = env.get("FLEET_NAME", "Cloud Lab")
     compartment_id = env.get("OCI_COMPARTMENT_ID", "")
 
     fleet_file = TOOLS_DIR / "fleet.json"
@@ -120,7 +121,7 @@ def main() -> None:
     title = f"{fleet_name}: daily report {'OK' if all_ok else 'ISSUES FOUND'}"
     try:
         req = urllib.request.Request(
-            f"https://ntfy.sh/{topic}",
+            f"{ntfy_server.rstrip('/')}/{topic}",
             data=body.encode("utf-8"),
             headers={"Title": title, "Tags": tags},
             method="POST",

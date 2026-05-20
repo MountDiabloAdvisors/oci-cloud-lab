@@ -59,7 +59,7 @@ def collect_stats() -> dict:
     }
 
 
-def ntfy_heartbeat(topic: str, vm_name: str, fleet_name: str, stats: dict) -> None:
+def ntfy_heartbeat(topic: str, vm_name: str, fleet_name: str, stats: dict, server: str = "https://ntfy.sh") -> None:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     body = (
         f"VM: {vm_name}\n"
@@ -71,7 +71,7 @@ def ntfy_heartbeat(topic: str, vm_name: str, fleet_name: str, stats: dict) -> No
     )
     try:
         req = urllib.request.Request(
-            f"https://ntfy.sh/{topic}",
+            f"{server.rstrip('/')}/{topic}",
             data=body.encode("utf-8"),
             headers={"Title": f"{fleet_name}: {vm_name} alive", "Tags": "heartbeat,green_circle"},
             method="POST",
@@ -94,12 +94,13 @@ def main() -> None:
     stats = collect_stats()
     print(f"[health_check] {stats}", flush=True)
 
-    topic = env.get("NOTIFY_NTFY_TOPIC", "")
-    vm_name = env.get("FLEET_VM_NAME", "unknown")
-    fleet_name = env.get("FLEET_NAME", "Cloud Lab")
+    topic       = env.get("NOTIFY_NTFY_TOPIC", "")
+    ntfy_server = env.get("NOTIFY_NTFY_SERVER", "https://ntfy.sh")
+    vm_name     = env.get("FLEET_VM_NAME", "unknown")
+    fleet_name  = env.get("FLEET_NAME", "Cloud Lab")
 
     if topic:
-        ntfy_heartbeat(topic, vm_name, fleet_name, stats)
+        ntfy_heartbeat(topic, vm_name, fleet_name, stats, ntfy_server)
     else:
         print("[health_check] NOTIFY_NTFY_TOPIC not set — skipping ntfy.", flush=True)
 

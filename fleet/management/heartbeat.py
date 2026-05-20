@@ -57,8 +57,9 @@ def fleet_summary() -> str:
 def main() -> None:
     env = parse_env_file(ENV_FILE)
     env.update(os.environ)
-    topic = env.get("NOTIFY_NTFY_TOPIC", "")
-    fleet_name = env.get("FLEET_NAME", "Cloud Lab")
+    topic       = env.get("NOTIFY_NTFY_TOPIC", "")
+    ntfy_server = env.get("NOTIFY_NTFY_SERVER", "https://ntfy.sh").rstrip("/")
+    fleet_name  = env.get("FLEET_NAME", "Cloud Lab")
 
     if not topic:
         print("[heartbeat] NOTIFY_NTFY_TOPIC not set — skipping.", flush=True)
@@ -71,7 +72,7 @@ def main() -> None:
     print(f"[heartbeat] Sending to ntfy/{topic}...", flush=True)
     try:
         req = urllib.request.Request(
-            f"https://ntfy.sh/{topic}",
+            f"{ntfy_server}/{topic}",
             data=message.encode("utf-8"),
             headers={"Title": f"{fleet_name} Heartbeat", "Tags": "heartbeat,green_circle"},
             method="POST",

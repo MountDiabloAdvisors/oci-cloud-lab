@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Re-apply full setup to a running management VM from your laptop.
+Re-apply full setup to a running management VM from your local machine.
 
 Used for: first-time setup if cloud-init didn't complete, updating config
 after code changes, or recovering a broken management VM.
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -76,7 +77,7 @@ def build_script(env: dict[str, str]) -> str:
     if missing:
         raise SystemExit(f"Missing required values in .env: {', '.join(missing)}")
 
-    # Hash on the laptop — plaintext never sent to VM.
+    # Hash locally — plaintext never sent to VM.
     pw_hash = hash_password(admin_pass)
     clone_url = f"https://oauth2:{token}@github.com/{repo}.git"
 
@@ -127,7 +128,7 @@ patch_key() {{
         || echo "${{key}}=${{val}}" >> "$HOME/.config/cloud-lab/management.env"
 }}
 
-# force_key: always update (must stay in sync with laptop .env).
+# force_key: always update (must stay in sync with local .env).
 force_key() {{
     local key="$1" val="$2"
     if grep -q "^${{key}}=" "$HOME/.config/cloud-lab/management.env"; then
@@ -214,8 +215,18 @@ def main() -> int:
 
     if dry_run:
         print("-- DRY RUN -- script that would run on the VM --")
-        token = env.get("GITHUB_TOKEN", "")
-        print(script.replace(token, "***REDACTED***") if token else script)
+        redacted = script
+        for key in ("GITHUB_TOKEN", "ADMIN_PASSWORD", "NOTIFY_NTFY_TOPIC"):
+            val = env.get(key, "")
+            if val:
+                redacted = redacted.replace(val, f"***{key}***")
+        # redact any PBKDF2 hash line (computed value, different salt each run)
+        redacted = re.sub(
+            r"sha256:\d+:[0-9a-f]{32}:[0-9a-f]{64}",
+            "***ADMIN_PASSWORD_HASH***",
+            redacted,
+        )
+        print(redacted)
         return 0
 
     print(f"[bootstrap] Connecting to management ({ip})...")

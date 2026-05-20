@@ -32,7 +32,7 @@ PORT       = int(os.getenv("ADMIN_CONSOLE_PORT", "8765"))
 USERNAME   = os.getenv("ADMIN_USERNAME", "admin")
 PW_HASH    = os.getenv("ADMIN_PASSWORD_HASH", "")
 FLEET_NAME = os.getenv("FLEET_NAME", "Cloud Lab")
-TOOLS_DIR  = Path(os.getenv("ORACLE_TOOLS_DIR",
+TOOLS_DIR  = Path(os.getenv("CLOUD_LAB_DIR",
              str(Path.home() / "cloud-lab"))).expanduser()
 
 COOKIE_NAME      = "fleet_session"
@@ -43,6 +43,12 @@ _sessions_lock = threading.Lock()
 
 _heartbeats: dict[str, dict] = {}
 _hb_lock = threading.Lock()
+
+# ip -> (fail_count, window_start)
+_login_fails: dict[str, tuple[int, float]] = {}
+_fails_lock  = threading.Lock()
+MAX_LOGIN_ATTEMPTS = 5
+LOCKOUT_SECONDS    = 900   # 15 minutes
 
 
 # ── auth helpers ──────────────────────────────────────────────────────────────
@@ -56,6 +62,33 @@ def _verify_password(password: str) -> bool:
         return secrets.compare_digest(actual, expected)
     except Exception:
         return False
+
+
+def _check_rate_limit(ip: str) -> bool:
+    """Return True if the IP is allowed to attempt login, False if locked out."""
+    now = time.time()
+    with _fails_lock:
+        count, window_start = _login_fails.get(ip, (0, now))
+        if now - window_start > LOCKOUT_SECONDS:
+            # window expired — reset
+            _login_fails[ip] = (0, now)
+            return True
+        return count < MAX_LOGIN_ATTEMPTS
+
+
+def _record_fail(ip: str) -> None:
+    now = time.time()
+    with _fails_lock:
+        count, window_start = _login_fails.get(ip, (0, now))
+        if now - window_start > LOCKOUT_SECONDS:
+            _login_fails[ip] = (1, now)
+        else:
+            _login_fails[ip] = (count + 1, window_start)
+
+
+def _clear_fails(ip: str) -> None:
+    with _fails_lock:
+        _login_fails.pop(ip, None)
 
 
 def _create_session() -> str:
@@ -284,9 +317,14 @@ def export_page() -> bytes:
 </html>""".encode("utf-8")
 
 
-def login_page(error: bool = False) -> bytes:
+def login_page(error: bool = False, locked: bool = False) -> bytes:
     title = html.escape(FLEET_NAME)
-    err = '<p class="error">Incorrect username or password.</p>' if error else ""
+    if locked:
+        err = '<p class="error">Too many failed attempts. Try again in 15 minutes.</p>'
+    elif error:
+        err = '<p class="error">Incorrect username or password.</p>'
+    else:
+        err = ""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -361,10 +399,15 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path.rstrip("/")
 
         if path == "/login":
+            client_ip = self.client_address[0]
+            if not _check_rate_limit(client_ip):
+                self._html(429, login_page(error=True, locked=True))
+                return
             params   = parse_qs(body.decode("utf-8", errors="replace"))
             username = (params.get("username") or [""])[0]
             password = (params.get("password") or [""])[0]
             if username == USERNAME and _verify_password(password):
+                _clear_fails(client_ip)
                 sid = _create_session()
                 self.send_response(302)
                 self.send_header("Location", "/")
@@ -373,6 +416,7 @@ class Handler(BaseHTTPRequestHandler):
                     f"Max-Age={SESSION_DURATION}")
                 self.end_headers()
             else:
+                _record_fail(client_ip)
                 self._html(401, login_page(error=True))
 
         elif path == "/heartbeat":

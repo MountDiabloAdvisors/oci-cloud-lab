@@ -16,6 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${1:-}"
 
 echo "[keepalive] Installing cron jobs from $SCRIPT_DIR"
+mkdir -p "$HOME/cloud-lab/logs"
 
 # Helper: add a crontab entry if not already present (idempotent).
 add_cron() {
@@ -23,9 +24,9 @@ add_cron() {
     ( crontab -l 2>/dev/null; echo "$entry" ) | sort -u | crontab -
 }
 
-add_cron "0 */4 * * * python3 $SCRIPT_DIR/health_check.py >> /tmp/cloud-lab-keepalive.log 2>&1"
-add_cron "30 2 * * * bash $SCRIPT_DIR/log_rotate.sh >> /tmp/cloud-lab-keepalive.log 2>&1"
-add_cron "0 6 * * * python3 $SCRIPT_DIR/fleet_report.py >> /tmp/cloud-lab-keepalive.log 2>&1"
+add_cron "0 */4 * * * python3 $SCRIPT_DIR/health_check.py >> $HOME/cloud-lab/logs/keepalive.log 2>&1"
+add_cron "30 2 * * * bash $SCRIPT_DIR/log_rotate.sh >> $HOME/cloud-lab/logs/keepalive.log 2>&1"
+add_cron "0 6 * * * python3 $SCRIPT_DIR/fleet_report.py >> $HOME/cloud-lab/logs/keepalive.log 2>&1"
 
 echo "[keepalive] Cron jobs installed:"
 crontab -l | grep "cloud-lab"

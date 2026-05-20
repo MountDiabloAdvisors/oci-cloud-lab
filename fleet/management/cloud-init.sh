@@ -2,7 +2,7 @@
 # Cloud-init for the management VM — full one-click setup.
 # Runs as root on first boot via OCI user-data.
 # ${VAR} placeholders are substituted by oci_launch_until_available.py at launch time.
-# ADMIN_PASSWORD_HASH is pre-computed on the laptop — plaintext never enters user-data.
+# ADMIN_PASSWORD_HASH is pre-computed locally — plaintext never enters user-data.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 

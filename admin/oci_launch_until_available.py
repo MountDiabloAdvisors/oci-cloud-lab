@@ -263,7 +263,7 @@ def build_user_data(config: dict[str, Any], env: dict[str, str]) -> str | None:
     in profile JSON or git history.
 
     If ADMIN_PASSWORD is in env and ADMIN_PASSWORD_HASH is not, the hash is computed
-    here on the laptop so plaintext never enters the VM user-data.
+    locally so plaintext never enters the VM user-data.
     """
     template_value = config.get("cloud_init_template", "")
     if not template_value:
@@ -356,13 +356,14 @@ def notify_success(config: dict[str, Any], console_url: str) -> None:
     title = "Oracle VM launch succeeded"
     body = f"{config['instance_display_name']} is running. {console_url}"
 
-    ntfy_topic = str(config.get("notify_ntfy_topic", "") or "").strip()
+    ntfy_topic  = str(config.get("notify_ntfy_topic", "") or "").strip()
+    ntfy_server = str(config.get("notify_ntfy_server", "") or env.get("NOTIFY_NTFY_SERVER", "https://ntfy.sh")).strip().rstrip("/")
     webhook_url = str(config.get("notify_webhook_url", "") or "").strip()
 
     if ntfy_topic:
         try:
             req = urllib.request.Request(
-                f"https://ntfy.sh/{ntfy_topic}",
+                f"{ntfy_server}/{ntfy_topic}",
                 data=body.encode("utf-8"),
                 headers={"Title": title, "Tags": "white_check_mark,cloud"},
                 method="POST",
