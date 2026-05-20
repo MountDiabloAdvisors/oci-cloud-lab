@@ -176,7 +176,7 @@ git clone {clone_url} $HOME/cloud-lab || (cd $HOME/cloud-lab && git pull --ff-on
 mkdir -p $HOME/.config/cloud-lab
 printf '%s\\n' {repr(vm_env)} > $HOME/.config/cloud-lab/{role}.env
 chmod 600 $HOME/.config/cloud-lab/{role}.env
-TOOLS_DIR=$HOME/cloud-lab bash $HOME/cloud-lab/fleet/{role}/setup.sh
+ENV_FILE=$HOME/.config/cloud-lab/{role}.env TOOLS_DIR=$HOME/cloud-lab bash $HOME/cloud-lab/fleet/{role}/setup.sh
 bash $HOME/cloud-lab/payload/keepalive/install.sh $HOME/.config/cloud-lab/{role}.env
 """
 
