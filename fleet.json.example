@@ -1,0 +1,33 @@
+{
+  "_comment": "fleet.json — source of truth for the VMs in your cloud lab.",
+  "_fields": {
+    "name":           "Display name in OCI — must match instance_display_name in the launch profile",
+    "role":           "Used to select the right cloud-init and setup scripts under fleet/<role>/",
+    "shape":          "OCI compute shape — informational only, actual shape is in the launch profile",
+    "expected_state": "RUNNING means the orchestrator will launch/repair this VM if it goes down",
+    "profile":        "Path to the JSON launch profile (relative to repo root)"
+  },
+  "vms": [
+    {
+      "name": "management",
+      "role": "management",
+      "shape": "VM.Standard.E2.1.Micro",
+      "expected_state": "RUNNING",
+      "profile": "admin/profiles/management.json"
+    },
+    {
+      "name": "worker",
+      "role": "worker",
+      "shape": "VM.Standard.E2.1.Micro",
+      "expected_state": "RUNNING",
+      "profile": "admin/profiles/worker.json"
+    },
+    {
+      "name": "lab-vm",
+      "role": "lab-vm",
+      "shape": "VM.Standard.A1.Flex",
+      "expected_state": "RUNNING",
+      "profile": "admin/profiles/lab-vm.json"
+    }
+  ]
+}

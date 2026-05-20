@@ -1,0 +1,25 @@
+# Secrets — never commit
+.env
+
+# VM state snapshots — contain IP addresses
+vm-profiles/*.json
+vm-profiles/*.md
+!vm-profiles/README.md
+
+# Logs
+*.log
+/tmp/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db

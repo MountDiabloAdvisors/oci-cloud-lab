@@ -1,0 +1,271 @@
+#!/usr/bin/env python3
+"""
+One-time OCI network setup for the oracle-tools fleet.
+
+Creates the VCN, internet gateway, public subnet, route table,
+and security list needed before any VMs can be launched.
+
+Safe to re-run — skips resources that already exist.
+Prints the values you need to add to oracle-tools/.env when done.
+
+Usage:
+  setup-oci-network.bat
+  setup-oci-network.bat --dry-run   Show what would be created; don't create anything
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+ROOT     = Path(__file__).resolve().parent.parent   # oracle-tools/
+ENV_FILE = ROOT / ".env"
+
+VCN_CIDR    = "10.0.0.0/16"
+SUBNET_CIDR = "10.0.0.0/24"
+VCN_NAME    = "oracle-fleet-vcn"
+SUBNET_NAME = "oracle-fleet-subnet-public"
+IGW_NAME    = "oracle-fleet-igw"
+SL_NAME     = "oracle-fleet-seclist"
+RT_NAME     = "oracle-fleet-routetable"
+
+
+def parse_env(path: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not path.exists():
+        return out
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.strip(); v = v.strip().strip('"').strip("'")
+        if k:
+            out[k] = v
+    return out
+
+
+def oci_env() -> dict[str, str]:
+    e = os.environ.copy()
+    e["OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING"] = "True"
+    return e
+
+
+def run_oci(args: list[str], dry_run: bool = False) -> dict:
+    if dry_run:
+        print(f"  [dry-run] oci {' '.join(args)}")
+        return {}
+    oci = shutil.which("oci")
+    if not oci:
+        raise SystemExit("OCI CLI not found on PATH. Install it: https://docs.oracle.com/en-us/iaas/Content/API/SDKDocs/cliinstall.htm")
+    result = subprocess.run(
+        [oci, *args],
+        capture_output=True, text=True, encoding="utf-8",
+        errors="replace", env=oci_env(),
+    )
+    if result.returncode != 0:
+        raise SystemExit(f"OCI CLI error:\n{result.stderr or result.stdout}")
+    if not result.stdout.strip():
+        return {}
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return {"raw": result.stdout}
+
+
+def find_existing(resource_list: list[dict], display_name: str) -> dict | None:
+    for item in resource_list:
+        if item.get("display-name") == display_name and item.get("lifecycle-state") != "TERMINATED":
+            return item
+    return None
+
+
+def main() -> int:
+    dry_run = "--dry-run" in sys.argv
+
+    env = parse_env(ENV_FILE)
+    env.update(os.environ)
+
+    compartment_id = env.get("OCI_COMPARTMENT_ID", "").strip()
+    if not compartment_id:
+        print("Error: OCI_COMPARTMENT_ID not set in oracle-tools/.env")
+        return 1
+
+    if dry_run:
+        print("-- DRY RUN -- nothing will be created --\n")
+
+    print(f"Compartment: {compartment_id}\n")
+
+    # ── 1. VCN ────────────────────────────────────────────────────────────────
+    print("Checking VCN...")
+    vcn_list = run_oci(["network", "vcn", "list", "--compartment-id", compartment_id, "--all"])
+    existing_vcn = find_existing(vcn_list.get("data", []), VCN_NAME)
+
+    if existing_vcn:
+        vcn_id = existing_vcn["id"]
+        print(f"  Found existing VCN: {vcn_id}")
+    else:
+        print(f"  Creating VCN '{VCN_NAME}' ({VCN_CIDR})...")
+        result = run_oci([
+            "network", "vcn", "create",
+            "--compartment-id", compartment_id,
+            "--cidr-block", VCN_CIDR,
+            "--display-name", VCN_NAME,
+            "--dns-label", "fleetvcn",
+        ], dry_run)
+        vcn_id = (result.get("data") or {}).get("id", "DRY_RUN_VCN_OCID")
+        print(f"  Created VCN: {vcn_id}")
+
+    # ── 2. Internet Gateway ───────────────────────────────────────────────────
+    print("Checking Internet Gateway...")
+    igw_list = run_oci(["network", "internet-gateway", "list",
+                        "--compartment-id", compartment_id,
+                        "--vcn-id", vcn_id, "--all"])
+    existing_igw = find_existing(igw_list.get("data", []), IGW_NAME)
+
+    if existing_igw:
+        igw_id = existing_igw["id"]
+        print(f"  Found existing IGW: {igw_id}")
+    else:
+        print(f"  Creating Internet Gateway '{IGW_NAME}'...")
+        result = run_oci([
+            "network", "internet-gateway", "create",
+            "--compartment-id", compartment_id,
+            "--vcn-id", vcn_id,
+            "--is-enabled", "true",
+            "--display-name", IGW_NAME,
+        ], dry_run)
+        igw_id = (result.get("data") or {}).get("id", "DRY_RUN_IGW_OCID")
+        print(f"  Created IGW: {igw_id}")
+
+    # ── 3. Route Table ────────────────────────────────────────────────────────
+    print("Checking Route Table...")
+    rt_list = run_oci(["network", "route-table", "list",
+                       "--compartment-id", compartment_id,
+                       "--vcn-id", vcn_id, "--all"])
+    existing_rt = find_existing(rt_list.get("data", []), RT_NAME)
+
+    if existing_rt:
+        rt_id = existing_rt["id"]
+        print(f"  Found existing Route Table: {rt_id}")
+    else:
+        print(f"  Creating Route Table '{RT_NAME}' with default route → IGW...")
+        route_rules = json.dumps([{
+            "cidrBlock": "0.0.0.0/0",
+            "networkEntityId": igw_id,
+        }])
+        result = run_oci([
+            "network", "route-table", "create",
+            "--compartment-id", compartment_id,
+            "--vcn-id", vcn_id,
+            "--display-name", RT_NAME,
+            "--route-rules", route_rules,
+        ], dry_run)
+        rt_id = (result.get("data") or {}).get("id", "DRY_RUN_RT_OCID")
+        print(f"  Created Route Table: {rt_id}")
+
+    # ── 4. Security List ──────────────────────────────────────────────────────
+    print("Checking Security List...")
+    sl_list = run_oci(["network", "security-list", "list",
+                       "--compartment-id", compartment_id,
+                       "--vcn-id", vcn_id, "--all"])
+    existing_sl = find_existing(sl_list.get("data", []), SL_NAME)
+
+    if existing_sl:
+        sl_id = existing_sl["id"]
+        print(f"  Found existing Security List: {sl_id}")
+    else:
+        print(f"  Creating Security List '{SL_NAME}'...")
+        ingress_rules = json.dumps([
+            {   # SSH
+                "protocol": "6", "source": "0.0.0.0/0", "isStateless": False,
+                "tcpOptions": {"destinationPortRange": {"min": 22, "max": 22}},
+                "description": "SSH",
+            },
+            {   # HTTP (Caddy ACME challenge + redirect)
+                "protocol": "6", "source": "0.0.0.0/0", "isStateless": False,
+                "tcpOptions": {"destinationPortRange": {"min": 80, "max": 80}},
+                "description": "HTTP",
+            },
+            {   # HTTPS
+                "protocol": "6", "source": "0.0.0.0/0", "isStateless": False,
+                "tcpOptions": {"destinationPortRange": {"min": 443, "max": 443}},
+                "description": "HTTPS",
+            },
+            {   # ICMP ping
+                "protocol": "1", "source": "0.0.0.0/0", "isStateless": False,
+                "icmpOptions": {"type": 8},
+                "description": "ICMP ping",
+            },
+        ])
+        egress_rules = json.dumps([
+            {   # All outbound
+                "protocol": "all", "destination": "0.0.0.0/0", "isStateless": False,
+                "description": "All outbound",
+            },
+        ])
+        result = run_oci([
+            "network", "security-list", "create",
+            "--compartment-id", compartment_id,
+            "--vcn-id", vcn_id,
+            "--display-name", SL_NAME,
+            "--ingress-security-rules", ingress_rules,
+            "--egress-security-rules", egress_rules,
+        ], dry_run)
+        sl_id = (result.get("data") or {}).get("id", "DRY_RUN_SL_OCID")
+        print(f"  Created Security List: {sl_id}")
+
+    # ── 5. Subnet ─────────────────────────────────────────────────────────────
+    print("Checking Subnet...")
+    subnet_list = run_oci(["network", "subnet", "list",
+                           "--compartment-id", compartment_id,
+                           "--vcn-id", vcn_id, "--all"])
+    existing_subnet = find_existing(subnet_list.get("data", []), SUBNET_NAME)
+
+    if existing_subnet:
+        subnet_id = existing_subnet["id"]
+        print(f"  Found existing Subnet: {subnet_id}")
+    else:
+        print(f"  Creating public Subnet '{SUBNET_NAME}' ({SUBNET_CIDR})...")
+        result = run_oci([
+            "network", "subnet", "create",
+            "--compartment-id", compartment_id,
+            "--vcn-id", vcn_id,
+            "--cidr-block", SUBNET_CIDR,
+            "--display-name", SUBNET_NAME,
+            "--dns-label", "fleetpub",
+            "--route-table-id", rt_id,
+            "--security-list-ids", json.dumps([sl_id]),
+        ], dry_run)
+        subnet_id = (result.get("data") or {}).get("id", "DRY_RUN_SUBNET_OCID")
+        print(f"  Created Subnet: {subnet_id}")
+
+    # ── 6. Availability Domain ────────────────────────────────────────────────
+    print("\nFetching availability domains...")
+    ad_list = run_oci(["iam", "availability-domain", "list",
+                       "--compartment-id", compartment_id])
+    ads = [item["name"] for item in (ad_list.get("data") or [])]
+    ad = ads[0] if ads else "UNKNOWN"
+    print(f"  Availability domain: {ad}")
+    if len(ads) > 1:
+        print(f"  (All ADs: {', '.join(ads)} — using first)")
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    print("\n" + "─" * 60)
+    print("Network setup complete. Add these to oracle-tools/.env:\n")
+    print(f"OCI_SUBNET_ID={subnet_id}")
+    print(f"OCI_AVAILABILITY_DOMAIN={ad}")
+    print()
+    if not dry_run:
+        print("Also update your .env file now — then run launch-management.bat.")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

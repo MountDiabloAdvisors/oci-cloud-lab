@@ -1,0 +1,25 @@
+{
+  "vms": [
+    {
+      "name": "management",
+      "role": "management",
+      "shape": "VM.Standard.E2.1.Micro",
+      "expected_state": "RUNNING",
+      "profile": "admin/profiles/management.json"
+    },
+    {
+      "name": "worker",
+      "role": "worker",
+      "shape": "VM.Standard.E2.1.Micro",
+      "expected_state": "RUNNING",
+      "profile": "admin/profiles/worker.json"
+    },
+    {
+      "name": "lab-vm",
+      "role": "lab-vm",
+      "shape": "VM.Standard.A1.Flex",
+      "expected_state": "RUNNING",
+      "profile": "admin/profiles/lab-vm.json"
+    }
+  ]
+}
