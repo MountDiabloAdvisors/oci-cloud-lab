@@ -10,6 +10,7 @@ Endpoints:
   GET  /logout        Clear session, redirect to /login
   POST /heartbeat     Liveness pings from worker/lab-vm (no auth required)
   GET  /export        Fleet connection details for downstream projects (login required)
+  GET  /stats?vm=<name>  Live system stats for any fleet VM (login required)
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import html
 import json
 import os
 import secrets
+import subprocess
 import threading
 import time
 from datetime import datetime, timezone
@@ -150,6 +152,157 @@ def fmt_ago(iso: str) -> str:
         return iso
 
 
+# ── live stats ────────────────────────────────────────────────────────────────
+
+def _mgmt_env() -> dict[str, str]:
+    out: dict[str, str] = {}
+    p = Path.home() / ".config" / "cloud-lab" / "management.env"
+    if not p.exists():
+        return out
+    for raw in p.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.strip(); v = v.strip().strip('"').strip("'")
+        if k:
+            out[k] = v
+    return out
+
+
+_STATS_CMD = (
+    "echo '=== UPTIME ===' && uptime && "
+    "echo && echo '=== PROCESSES ===' && "
+    "top -b -n 1 -c -w 200 2>/dev/null | head -40 && "
+    "echo && echo '=== MEMORY ===' && free -h --si && "
+    "echo && echo '=== DISK ===' && df -h"
+)
+
+
+def collect_local_stats() -> str:
+    try:
+        result = subprocess.run(
+            ["bash", "-c", _STATS_CMD],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, timeout=10,
+        )
+        return result.stdout or "(no output)"
+    except Exception as exc:
+        return f"Error collecting local stats: {exc}"
+
+
+def collect_remote_stats(vm_name: str) -> str:
+    env = _mgmt_env()
+    ssh_key  = env.get("OCI_SSH_PRIVATE_KEY_PATH", str(Path.home() / ".ssh" / "fleet.key"))
+    ssh_user = env.get("OCI_SSH_USER", "ubuntu")
+
+    # look up public IP from vm-profiles snapshot
+    profile = load_json(TOOLS_DIR / "vm-profiles" / f"{vm_name}.json") or {}
+    public_ip = profile.get("public_ip", "")
+    if not public_ip or public_ip == "—":
+        return f"No public IP found for {vm_name} in vm-profiles. Run check-all-vms first."
+
+    key_path = str(Path(ssh_key).expanduser())
+    try:
+        result = subprocess.run(
+            ["ssh",
+             "-i", key_path,
+             "-o", "StrictHostKeyChecking=accept-new",
+             "-o", "ConnectTimeout=8",
+             "-o", "BatchMode=yes",
+             f"{ssh_user}@{public_ip}",
+             _STATS_CMD],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, timeout=20,
+        )
+        return result.stdout or "(no output)"
+    except subprocess.TimeoutExpired:
+        return f"SSH timed out connecting to {vm_name} ({public_ip})."
+    except Exception as exc:
+        return f"SSH error for {vm_name} ({public_ip}): {exc}"
+
+
+def stats_page(vm_name: str, fleet_vms: list) -> bytes:
+    title = html.escape(FLEET_NAME)
+    safe_name = html.escape(vm_name)
+
+    if vm_name == "management":
+        raw = collect_local_stats()
+    else:
+        raw = collect_remote_stats(vm_name)
+
+    output = html.escape(raw)
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    vm_links = " &nbsp;·&nbsp; ".join(
+        f'<a href="/stats?vm={html.escape(v)}" {"class=\"active\"" if v == vm_name else ""}>{html.escape(v)}</a>'
+        for v in fleet_vms
+    )
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{title} — {safe_name} stats</title>
+  <style>
+    {COMMON_CSS}
+    .topbar {{ background: #1e293b; color: white; padding: 14px 24px;
+               display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }}
+    .topbar h1 {{ margin: 0; font-size: 18px; }}
+    .topbar nav {{ display: flex; gap: 16px; align-items: center; }}
+    .topbar a {{ color: #94a3b8; font-size: 13px; text-decoration: none; }}
+    .topbar a:hover, .topbar a.active {{ color: white; }}
+    .content {{ max-width: 1000px; margin: 24px auto; padding: 0 16px; }}
+    .vmbar {{ display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }}
+    .vmbar a {{ padding: 5px 14px; border-radius: 999px; font-size: 13px; font-weight: 500;
+                background: #e2e8f0; color: #374151; text-decoration: none; }}
+    .vmbar a:hover {{ background: #cbd5e1; }}
+    .vmbar a.active {{ background: #1e293b; color: white; }}
+    .meta {{ font-size: 12px; color: #64748b; margin-bottom: 8px; }}
+    pre {{ background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 20px;
+           font-size: 12.5px; line-height: 1.55; overflow-x: auto; white-space: pre; }}
+    .actions {{ margin-top: 14px; display: flex; gap: 10px; align-items: center; }}
+    .btn {{ padding: 7px 18px; border-radius: 7px; font-size: 13px; font-weight: 600;
+            background: #2563eb; color: white; border: none; cursor: pointer; text-decoration: none; }}
+    .btn:hover {{ background: #1d4ed8; }}
+    label {{ font-size: 13px; color: #374151; display: flex; align-items: center; gap: 6px; cursor: pointer; }}
+  </style>
+  <script>
+    let autoRefresh = false;
+    let timer = null;
+    function toggleAuto(cb) {{
+      autoRefresh = cb.checked;
+      if (autoRefresh) {{
+        timer = setInterval(() => location.reload(), 10000);
+      }} else {{
+        clearInterval(timer);
+      }}
+    }}
+  </script>
+</head>
+<body>
+  <div class="topbar">
+    <h1>{title} — Live Stats</h1>
+    <nav>
+      <a href="/">← Fleet</a>
+      <a href="/export">Export</a>
+      <a href="/logout">Sign out</a>
+    </nav>
+  </div>
+  <div class="content">
+    <div class="vmbar">{vm_links}</div>
+    <p class="meta">Snapshot taken at {now}</p>
+    <pre>{output}</pre>
+    <div class="actions">
+      <a class="btn" href="/stats?vm={html.escape(vm_name)}">Refresh</a>
+      <label><input type="checkbox" onchange="toggleAuto(this)"> Auto-refresh every 10s</label>
+    </div>
+  </div>
+</body>
+</html>""".encode("utf-8")
+
+
 # ── HTML ──────────────────────────────────────────────────────────────────────
 
 COMMON_CSS = """
@@ -185,6 +338,7 @@ def vm_cards() -> str:
             hb_html = ""
 
         sc = state.lower().replace("/", "-")
+        stats_link = f'<a class="stats-link" href="/stats?vm={html.escape(name)}">Live stats ›</a>'
         cards.append(f"""<div class="card">
   <div class="card-header">
     <span class="name">{html.escape(name)}</span>
@@ -197,6 +351,7 @@ def vm_cards() -> str:
   <p><b>OCI snapshot:</b> {html.escape(synced_at)}</p>
   {hb_html}
   <p class="notes">{html.escape(vm.get('notes', ''))}</p>
+  {stats_link}
 </div>""")
     return "\n".join(cards) if cards else "<p>No VMs defined in fleet.json.</p>"
 
@@ -231,6 +386,9 @@ def fleet_page() -> bytes:
     .terminated, .terminating {{ background: #fee2e2; color: #991b1b; }}
     .warn {{ color: #92400e; }}
     .notes {{ color: #64748b; font-size: 13px; }}
+    .stats-link {{ display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 600;
+                   color: #2563eb; text-decoration: none; }}
+    .stats-link:hover {{ color: #1d4ed8; text-decoration: underline; }}
     footer {{ text-align: center; font-size: 12px; color: #94a3b8; padding: 16px; }}
   </style>
 </head>
@@ -238,6 +396,7 @@ def fleet_page() -> bytes:
   <div class="topbar">
     <h1>{title}</h1>
     <nav>
+      <a href="/stats">Stats</a>
       <a href="/export">Export config</a>
       <a href="/logout">Sign out</a>
     </nav>
@@ -369,7 +528,9 @@ def login_page(error: bool = False, locked: bool = False) -> bytes:
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        path = urlparse(self.path).path.rstrip("/") or "/"
+        parsed = urlparse(self.path)
+        path   = parsed.path.rstrip("/") or "/"
+        qs     = parse_qs(parsed.query)
 
         if path == "/login":
             self._html(200, login_page())
@@ -390,6 +551,13 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
         elif path == "/export":
             self._html(200, export_page())
+        elif path == "/stats":
+            fleet = load_json(TOOLS_DIR / "fleet.json") or {"vms": []}
+            fleet_names = [v.get("name", "") for v in fleet.get("vms", []) if v.get("name")]
+            vm_name = (qs.get("vm") or ["management"])[0]
+            if vm_name not in fleet_names:
+                vm_name = "management"
+            self._html(200, stats_page(vm_name, fleet_names))
         else:
             self._html(200, fleet_page())
 

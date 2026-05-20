@@ -88,10 +88,10 @@ sudo apt-get update -qq
 sudo apt-get install -y -qq ca-certificates curl git jq python3 python3-venv tmux unzip debian-keyring debian-archive-keyring apt-transport-https
 
 echo "[bootstrap] Installing OCI CLI..."
-if ! command -v oci > /dev/null 2>&1; then
+if ! command -v oci > /dev/null 2>&1 && [ ! -f "$HOME/bin/oci" ]; then
     bash -c "$(curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh)" -- --accept-all-defaults
 fi
-if [ -f "$HOME/bin/oci" ]; then
+if [ -f "$HOME/bin/oci" ] && [ ! -f /usr/local/bin/oci ]; then
     sudo ln -sf "$HOME/bin/oci" /usr/local/bin/oci
 fi
 oci --version

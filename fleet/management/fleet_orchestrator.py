@@ -291,11 +291,25 @@ def check_and_repair_fleet(fleet: list[dict[str, Any]], env: dict[str, str]) -> 
             log(f"Launch failed for {name} — will retry next cycle.")
             continue
 
+        # Wait for RUNNING state before querying IP (PROVISIONING takes 60-120s).
+        log(f"Waiting for {name} to reach RUNNING state (up to 5 min)...")
+        for _ in range(30):
+            try:
+                if get_instance_state(name, compartment_id) == "RUNNING":
+                    break
+            except Exception:
+                pass
+            time.sleep(10)
+
         try:
             public_ip = get_public_ip(name, compartment_id)
         except Exception as exc:
             log(f"Could not get public IP for {name}: {exc}")
             ntfy(ntfy_topic, f"{fleet_name}: {name} launched (IP unknown)", vm.get("notes", ""), tags="rocket", server=ntfy_server)
+            continue
+
+        if not public_ip:
+            log(f"Could not get public IP for {name} — VM may still be provisioning. Will retry next cycle.")
             continue
 
         log(f"{name} public IP: {public_ip}")
