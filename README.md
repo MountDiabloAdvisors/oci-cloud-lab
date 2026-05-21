@@ -25,9 +25,9 @@ You run launch-management  →  Management VM boots (cloud-init, ~5 min)
                                   ↓
                            Launches worker VM  (micro, ~3 min)
                                   ↓
-                           Starts A1 Flex lottery loop for lab-vm  (hours–days)
+                           Starts A1 Flex lottery loop for laboratory  (hours–days)
                                   ↓
-                           lab-vm wins capacity, boots, checks in via heartbeat
+                           laboratory wins capacity, boots, starts MDA dashboard, checks in via heartbeat
 ```
 
 You are watching a self-assembling cloud lab. The only manual step after the first
@@ -132,7 +132,7 @@ All scripts are in `admin/`. Run them from the repo root. `.bat` for Windows,
 | `setup-oci-network` | Create VCN/subnet/security rules — run once |
 | `launch-management` | Launch the management VM |
 | `check-all-vms` | Query OCI state + SSH probe all VMs; updates `vm-profiles/` |
-| `ssh-vm <name>` | SSH into any fleet VM (`management`, `worker`, `lab-vm`) |
+| `ssh-vm <name>` | SSH into any fleet VM (`management`, `worker`, `laboratory`) |
 | `bootstrap-mgmt-vm` | Re-apply full config to a running management VM |
 | `terminate-vm <name>` | Terminate a VM by name |
 | `hash_password.py` | Generate `ADMIN_PASSWORD_HASH` for `.env` |
@@ -146,7 +146,7 @@ Three VMs, two shapes — all within Oracle's Always Free tier:
 ```
 management   VM.Standard.E2.1.Micro    Orchestrator · admin console · heartbeat · crosswatch
 worker       VM.Standard.E2.1.Micro    General compute — available for your workloads
-lab-vm       VM.Standard.A1.Flex       4 OCPU / 24 GB RAM — your main resource
+laboratory   VM.Standard.A1.Flex       4 OCPU / 24 GB RAM — MDA dashboard host
 ```
 
 VM configuration is in `fleet.json` (committed, safe to edit). Role-specific
@@ -205,6 +205,21 @@ To add your project:
 
 See [payload/README.md](payload/README.md) for details.
 
+### MDA dashboard on laboratory
+
+In this downstream MDA repo, the `laboratory` role immediately clones
+`MountDiabloAdvisors/dashboard`, installs it with `uv`, and runs it as the
+`mda-dashboard` systemd service on `127.0.0.1:8700`. It also installs a
+`mda-dashboard-ping` timer every 30 minutes so the workload is exercised.
+
+Access it with an SSH tunnel:
+
+```bash
+ssh -i ~/.ssh/fleet.key -L 8700:127.0.0.1:8700 ubuntu@<laboratory-public-ip>
+```
+
+Then open `http://127.0.0.1:8700` locally.
+
 **Connecting a separate project:** once the fleet is running, hit `/export` in the
 admin console to get a block of env vars (public IPs, private IPs, SSH user). Paste
 those into your project's `.env`. The fleet keeps managing itself independently.
@@ -239,7 +254,7 @@ sudo journalctl -u caddy -n 50
 
 **OCI CLI errors on the management VM** — run `bootstrap-mgmt-vm` to re-apply setup.
 
-**Worker or lab-vm stuck as NOT FOUND** — the orchestrator is working on it. Check:
+**Worker or laboratory stuck as NOT FOUND** — the orchestrator is working on it. Check:
 ```bash
 bash admin/ssh-vm.sh management
 journalctl -u cloud-lab-orchestrator -f

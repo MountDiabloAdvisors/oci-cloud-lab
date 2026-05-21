@@ -39,10 +39,10 @@ TIMER
 sudo mv /tmp/cloud-lab-heartbeat.service /etc/systemd/system/cloud-lab-heartbeat.service
 sudo mv /tmp/cloud-lab-heartbeat.timer   /etc/systemd/system/cloud-lab-heartbeat.timer
 
-# ── cross-watch timer (every 6 h, direct ntfy if peer TERMINATED) ────────────
+# ── cross-watch timer (reports anomalies to management every 6 h) ────────────
 cat > /tmp/cloud-lab-crosswatch.service <<SERVICE
 [Unit]
-Description=Cloud Lab cross-watch — checks peer VMs, ntfy direct alert if down
+Description=Cloud Lab cross-watch — checks peer VMs, reports anomalies to management
 
 [Service]
 User=ubuntu
@@ -95,10 +95,10 @@ TIMER
 sudo mv /tmp/cloud-lab-update.service /etc/systemd/system/cloud-lab-update.service
 sudo mv /tmp/cloud-lab-update.timer   /etc/systemd/system/cloud-lab-update.timer
 
-# ── A1 capacity lottery (maintains lab-vm) ────────────────────────────────────
+# ── A1 capacity lottery (maintains laboratory) ────────────────────────────────────
 cat > /tmp/cloud-lab-a1-lottery.service <<SERVICE
 [Unit]
-Description=Cloud Lab A1 lottery — maintains lab-vm (A1.Flex) in the fleet
+Description=Cloud Lab A1 lottery — maintains laboratory (A1.Flex) in the fleet
 After=network-online.target
 Wants=network-online.target
 
@@ -109,7 +109,7 @@ EnvironmentFile=${ENV_FILE}
 Environment=OCI_AUTH_MODE=instance_principal
 Environment=TOOLS_DIR=${TOOLS_DIR}
 WorkingDirectory=${TOOLS_DIR}
-ExecStart=${PYTHON} ${SRC}/lab_vm_lottery.py
+ExecStart=${PYTHON} ${SRC}/laboratory_lottery.py
 Restart=on-failure
 RestartSec=60
 Environment=PYTHONUNBUFFERED=1

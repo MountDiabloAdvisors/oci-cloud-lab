@@ -15,8 +15,8 @@
       "notes": "Background worker. Runs scheduled tasks. Heartbeats to management. Cross-watches other VMs."
     },
     {
-      "name": "lab-vm",
-      "role": "lab-vm",
+      "name": "laboratory",
+      "role": "laboratory",
       "shape": "VM.Standard.A1.Flex",
       "expected_state": "MANAGED_BY_WORKER",
       "notes": "Main dashboard host. Finance app + database. Worker runs the A1 capacity lottery."

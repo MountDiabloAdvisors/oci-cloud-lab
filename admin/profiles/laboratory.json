@@ -1,8 +1,8 @@
 {
-  "instance_display_name": "mda-management",
-  "shape": "VM.Standard.E2.1.Micro",
-  "ocpus": 1,
-  "memory_in_gbs": 1,
+  "instance_display_name": "laboratory",
+  "shape": "VM.Standard.A1.Flex",
+  "ocpus": 4,
+  "memory_in_gbs": 24,
   "operating_system": "Canonical Ubuntu",
   "operating_system_version": "24.04",
   "retry_delay_seconds": 90,
@@ -30,5 +30,5 @@
     "env": "OCI_AVAILABILITY_DOMAIN",
     "default": ""
   },
-  "cloud_init_template": "fleet/management/cloud-init.sh"
+  "cloud_init_template": "fleet/laboratory/cloud-init.sh"
 }
