@@ -5,21 +5,21 @@
       "role": "management",
       "shape": "VM.Standard.E2.1.Micro",
       "expected_state": "RUNNING",
-      "profile": "admin/profiles/management.json"
+      "notes": "Fleet controller. Runs the fleet orchestrator, admin console, and fleet-level heartbeats to the owner."
     },
     {
       "name": "worker",
       "role": "worker",
       "shape": "VM.Standard.E2.1.Micro",
       "expected_state": "RUNNING",
-      "profile": "admin/profiles/worker.json"
+      "notes": "Background worker. Runs scheduled tasks. Heartbeats to management. Cross-watches other VMs."
     },
     {
       "name": "lab-vm",
       "role": "lab-vm",
       "shape": "VM.Standard.A1.Flex",
       "expected_state": "RUNNING",
-      "profile": "admin/profiles/lab-vm.json"
+      "notes": "Main dashboard host. Finance app + database. Expected offline until Oracle A1 capacity is obtained."
     }
   ]
 }
