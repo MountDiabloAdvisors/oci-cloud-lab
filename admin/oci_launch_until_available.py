@@ -400,25 +400,42 @@ def launch_args(
     return args, temp_files
 
 
+def search_query_literal(value: str) -> str:
+    """Escape a value for OCI structured-search single-quoted string syntax."""
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def resource_search_instance(config: dict[str, Any]) -> dict[str, Any] | None:
+    """Find an instance by display name via OCI Resource Search."""
+    name = config["instance_display_name"]
+    query = f"query instance resources where displayName = '{search_query_literal(name)}'"
+    data = run_oci_json(
+        ["search", "resource", "structured-search",
+         "--query-text", query,
+         "--limit", "20"],
+        auth_mode=config["oci_auth"],
+        timeout_seconds=60,
+        heartbeat_seconds=int(config.get("oci_heartbeat_seconds", 15)),
+        label="Pre-flight resource search",
+    )
+    for item in data.get("data", {}).get("items", []):
+        display_name = item.get("display-name") or item.get("displayName")
+        lifecycle_state = item.get("lifecycle-state") or item.get("lifecycleState") or "UNKNOWN"
+        identifier = item.get("identifier") or item.get("id")
+        if display_name == name and lifecycle_state not in ("TERMINATING", "TERMINATED", "DELETED"):
+            return {
+                "id": identifier,
+                "display-name": display_name,
+                "lifecycle-state": lifecycle_state,
+                "compartment-id": item.get("compartment-id") or item.get("compartmentId"),
+            }
+    return None
+
+
 def find_active_instance(config: dict[str, Any]) -> dict[str, Any] | None:
     """Return an existing non-terminated instance with this display name, if any."""
-    timeout_seconds = max(180, int(config.get("oci_timeout_seconds", 60)))
-    log(f"Pre-flight: checking OCI for existing '{config['instance_display_name']}' "
-        f"(timeout {timeout_seconds}s).")
-    data = run_oci_json(
-        ["compute", "instance", "list",
-         "--compartment-id", config["compartment_id"],
-         "--display-name", config["instance_display_name"]],
-            auth_mode=config["oci_auth"],
-            timeout_seconds=timeout_seconds,
-            heartbeat_seconds=int(config.get("oci_heartbeat_seconds", 15)),
-            label="Pre-flight instance lookup",
-        )
-    for item in data.get("data", []):
-        if (item.get("display-name") == config["instance_display_name"] and
-                item.get("lifecycle-state") not in ("TERMINATING", "TERMINATED")):
-            return item
-    return None
+    log(f"Pre-flight: searching OCI for existing '{config['instance_display_name']}'.")
+    return resource_search_instance(config)
 
 
 def instance_already_active(config: dict[str, Any]) -> bool:
