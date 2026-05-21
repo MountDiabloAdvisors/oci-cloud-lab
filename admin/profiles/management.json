@@ -6,7 +6,7 @@
   "operating_system": "Canonical Ubuntu",
   "operating_system_version": "24.04",
   "retry_delay_seconds": 90,
-  "oci_timeout_seconds": 120,
+  "oci_timeout_seconds": 300,
   "oci_heartbeat_seconds": 15,
   "open_console_on_success": {
     "env": "OCI_OPEN_CONSOLE_ON_SUCCESS",

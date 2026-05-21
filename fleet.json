@@ -18,8 +18,8 @@
       "name": "lab-vm",
       "role": "lab-vm",
       "shape": "VM.Standard.A1.Flex",
-      "expected_state": "RUNNING",
-      "notes": "Main dashboard host. Finance app + database. Expected offline until Oracle A1 capacity is obtained."
+      "expected_state": "MANAGED_BY_WORKER",
+      "notes": "Main dashboard host. Finance app + database. Worker runs the A1 capacity lottery."
     }
   ]
 }

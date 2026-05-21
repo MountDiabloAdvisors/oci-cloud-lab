@@ -95,11 +95,36 @@ TIMER
 sudo mv /tmp/cloud-lab-update.service /etc/systemd/system/cloud-lab-update.service
 sudo mv /tmp/cloud-lab-update.timer   /etc/systemd/system/cloud-lab-update.timer
 
+# ── A1 capacity lottery (maintains lab-vm) ────────────────────────────────────
+cat > /tmp/cloud-lab-a1-lottery.service <<SERVICE
+[Unit]
+Description=Cloud Lab A1 lottery — maintains lab-vm (A1.Flex) in the fleet
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+Type=simple
+EnvironmentFile=${ENV_FILE}
+Environment=OCI_AUTH_MODE=instance_principal
+Environment=TOOLS_DIR=${TOOLS_DIR}
+WorkingDirectory=${TOOLS_DIR}
+ExecStart=${PYTHON} ${SRC}/lab_vm_lottery.py
+Restart=on-failure
+RestartSec=60
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+sudo mv /tmp/cloud-lab-a1-lottery.service /etc/systemd/system/cloud-lab-a1-lottery.service
+
 # ── enable and start ──────────────────────────────────────────────────────────
 sudo systemctl daemon-reload
-sudo systemctl enable cloud-lab-heartbeat.timer cloud-lab-crosswatch.timer cloud-lab-update.timer
-sudo systemctl start  cloud-lab-heartbeat.timer cloud-lab-crosswatch.timer cloud-lab-update.timer
+sudo systemctl enable cloud-lab-heartbeat.timer cloud-lab-crosswatch.timer cloud-lab-update.timer cloud-lab-a1-lottery
+sudo systemctl start  cloud-lab-heartbeat.timer cloud-lab-crosswatch.timer cloud-lab-update.timer cloud-lab-a1-lottery
 
 echo ""
 echo "Worker role installed."
-echo "Timers: cloud-lab-heartbeat (4h → management), cloud-lab-crosswatch (6h → ntfy), cloud-lab-update (nightly)"
+echo "Timers:    cloud-lab-heartbeat (4h -> management), cloud-lab-crosswatch (6h -> management), cloud-lab-update (nightly)"
+echo "Services:  cloud-lab-a1-lottery (A1 Flex capacity lottery — running)"
