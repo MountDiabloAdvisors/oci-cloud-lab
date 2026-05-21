@@ -255,6 +255,12 @@ def write_snapshot(
 
 
 def main() -> int:
+    _W = 60
+    print("=" * _W)
+    print("  OCI Cloud Lab — STATUS")
+    print("  Checking on all VMs...")
+    print("=" * _W)
+    print()
     parser = argparse.ArgumentParser(description="Show OCI VM status and optional ping results.")
     parser.add_argument("--env", action="append", default=[])
     parser.add_argument("--name", help="Only show instances whose display name contains this text.")

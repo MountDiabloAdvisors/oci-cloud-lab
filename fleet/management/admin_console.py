@@ -410,7 +410,7 @@ a { color: var(--c-primary); }  a:hover { color: var(--c-primary-lt); }
           display: flex; align-items: center; justify-content: space-between;
           height: 52px; gap: 12px; }
 .topbar-left  { display: flex; align-items: center; gap: 10px; }
-.topbar-logo  { height: 32px; width: auto; }
+.topbar-logo  { height: 44px; width: auto; filter: drop-shadow(0 1px 3px rgba(0,0,0,.4)) brightness(1.2); }
 .fleet-name   { font-size: 17px; font-weight: 700; color: #fff; }
 .topbar-nav   { display: flex; align-items: center; gap: 4px; }
 .topbar-nav a, .topbar-nav button {
@@ -498,19 +498,20 @@ label { font-size: 13px; color: var(--c-text);
 .settings-panel h3 { margin: 0 0 12px; font-size: 12px; color: var(--c-muted);
                      text-transform: uppercase; letter-spacing: .5px; }
 .palette-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.palette-btn  { border: 2px solid transparent; border-radius: 8px; padding: 8px 4px;
+.palette-btn  { border: 3px solid transparent; border-radius: 8px; padding: 8px 4px;
                 color: #fff; font-size: 12px; font-weight: 700; cursor: pointer;
-                text-shadow: 0 1px 2px #0004; transition: border-color .15s; }
-.palette-btn:hover, .palette-btn.active { border-color: var(--c-accent); }
+                text-shadow: 0 1px 3px #0006; transition: border-color .15s, opacity .15s; }
+.palette-btn:hover, .palette-btn.active { border-color: var(--btn-accent, var(--c-accent)); opacity: 1; }
+.palette-btn:not(:hover):not(.active) { opacity: .85; }
 
 /* login */
 .login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
 .login-box  { background: var(--c-card); border: 1px solid var(--c-border);
               border-radius: 14px; padding: 38px 34px; width: 100%; max-width: 360px;
               box-shadow: 0 4px 24px #0002; }
-.login-logo { height: 48px; display: block; margin-bottom: 14px; }
-.login-box h1   { margin: 0 0 4px; font-size: 22px; }
-.login-box .sub { margin: 0 0 22px; color: var(--c-muted); font-size: 14px; }
+.login-logo { height: 88px; display: block; margin: 0 auto 18px; }
+.login-box h1   { margin: 0 0 4px; font-size: 22px; text-align: center; }
+.login-box .sub { margin: 0 0 22px; color: var(--c-muted); font-size: 14px; text-align: center; }
 .login-box label { display: block; font-size: 13px; font-weight: 600;
                    margin-bottom: 4px; color: var(--c-muted); }
 .login-box input { width: 100%; padding: 10px 12px; font-size: 15px;
@@ -540,8 +541,11 @@ THEME_JS = """
   var pal = localStorage.getItem('mda-palette');
   if (pal) { try {
     var p = JSON.parse(pal);
-    document.documentElement.style.setProperty('--c-primary', p.primary);
-    document.documentElement.style.setProperty('--c-accent',  p.accent);
+    var r = document.documentElement;
+    r.style.setProperty('--c-primary',    p.primary);
+    if (p.primaryLt) r.style.setProperty('--c-primary-lt', p.primaryLt);
+    if (p.primaryDk) r.style.setProperty('--c-primary-dk', p.primaryDk);
+    if (p.accent)    r.style.setProperty('--c-accent',     p.accent);
   } catch(e) {} }
 })();
 
@@ -560,10 +564,17 @@ function toggleSettings() {
   if (sp) sp.hidden = !_spOpen;
 }
 
-function applyPalette(primary, accent, btn) {
-  document.documentElement.style.setProperty('--c-primary', primary);
-  document.documentElement.style.setProperty('--c-accent',  accent);
-  localStorage.setItem('mda-palette', JSON.stringify({primary: primary, accent: accent}));
+function applyPalette(btn) {
+  var p  = btn.dataset.primary;
+  var pl = btn.dataset.primaryLt;
+  var pd = btn.dataset.primaryDk;
+  var a  = btn.dataset.accent;
+  var r  = document.documentElement;
+  r.style.setProperty('--c-primary',    p);
+  r.style.setProperty('--c-primary-lt', pl);
+  r.style.setProperty('--c-primary-dk', pd);
+  r.style.setProperty('--c-accent',     a);
+  localStorage.setItem('mda-palette', JSON.stringify({primary:p, primaryLt:pl, primaryDk:pd, accent:a}));
   document.querySelectorAll('.palette-btn').forEach(function(b) {
     b.classList.toggle('active', b === btn);
   });
@@ -579,12 +590,13 @@ function copyText(text, btn) {
 """
 
 PALETTE_PRESETS = [
-    ("#285e39", "#c5a028", "MDA Green"),
-    ("#1e4d8c", "#f59e0b", "Ocean Blue"),
-    ("#374151", "#6366f1", "Slate"),
-    ("#7c3aed", "#c5a028", "Violet"),
-    ("#9f1239", "#f59e0b", "Rose"),
-    ("#164e63", "#22d3ee", "Midnight"),
+    # (primary, primary_lt, primary_dk, accent, label)
+    ("#285e39", "#3a7a50", "#1b3f28", "#c5a028", "MDA Green"),   # forest green + gold
+    ("#1a3d6e", "#2d6cb5", "#0f2547", "#38bdf8", "Ocean"),       # navy + sky blue
+    ("#374151", "#4b5563", "#1f2937", "#f59e0b", "Slate"),       # cool gray + amber
+    ("#0d1117", "#1c2128", "#010409", "#39ff14", "Neons"),       # near-black + neon green
+    ("#6b4226", "#8a5530", "#4a2d1b", "#d4882a", "Earthy"),     # terracotta + warm amber
+    ("#0f3460", "#1a4f8c", "#071d3e", "#e94560", "Midnight"),   # deep navy + coral
 ]
 
 _LOG_SERVICES = [
@@ -627,9 +639,12 @@ def _topbar(active: str = "") -> str:
         for label, href, key in nav_items
     )
     palette_btns = " ".join(
-        f'<button class="palette-btn" style="background:{p}" '
-        f'onclick="applyPalette(\'{p}\',\'{a}\',this)">{name}</button>'
-        for p, a, name in PALETTE_PRESETS
+        f'<button class="palette-btn"'
+        f' style="background:{p};--btn-accent:{a}"'
+        f' data-primary="{p}" data-primary-lt="{pl}"'
+        f' data-primary-dk="{pd}" data-accent="{a}"'
+        f' onclick="applyPalette(this)">{name}</button>'
+        for p, pl, pd, a, name in PALETTE_PRESETS
     )
     return (
         f'<div class="topbar">'

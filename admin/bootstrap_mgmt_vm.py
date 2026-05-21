@@ -196,6 +196,11 @@ echo "(TLS cert issues within ~60s on first run)"
 
 
 def main() -> int:
+    _W = 60
+    print("=" * _W)
+    print("  OCI Cloud Lab — Management VM Bootstrapper")
+    print("=" * _W)
+    print()
     dry_run = "--dry-run" in sys.argv
 
     env = parse_env(ROOT / ".env")
