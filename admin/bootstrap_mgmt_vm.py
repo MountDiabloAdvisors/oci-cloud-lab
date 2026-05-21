@@ -117,6 +117,7 @@ fi
 
 echo "[bootstrap] Patching management config..."
 mkdir -p "$HOME/.config/cloud-lab"
+sudo chown "$USER":"$USER" "$HOME/.config/cloud-lab"
 touch "$HOME/.config/cloud-lab/management.env"
 chmod 600 "$HOME/.config/cloud-lab/management.env"
 MGMT_PRIVATE_IP="$(hostname -I | awk '{{print $1}}')"
