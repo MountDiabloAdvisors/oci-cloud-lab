@@ -375,7 +375,8 @@ PALETTE_CSS = """
   --c-primary-lt: #3a7a50;
   --c-primary-dk: #1b3f28;
   --c-accent:     #c5a028;
-  --c-bg:         #f4f7f4;
+  --c-topbar:     #2c3440;
+  --c-bg:         #f3f4f6;
   --c-card:       #ffffff;
   --c-text:       #17202a;
   --c-muted:      #64748b;
@@ -386,8 +387,8 @@ PALETTE_CSS = """
   --c-code-bg:    #0f172a;  --c-code-text: #e2e8f0;
 }
 [data-theme="dark"] {
-  --c-bg:         #0f1a13;
-  --c-card:       #1a2a1e;
+  --c-bg:         #111318;
+  --c-card:       #1e2128;
   --c-text:       #e8f5ea;
   --c-muted:      #7aaa82;
   --c-border:     #2d4a34;
@@ -406,22 +407,22 @@ body { font-family: system-ui,-apple-system,sans-serif; margin: 0;
 a { color: var(--c-primary); }  a:hover { color: var(--c-primary-lt); }
 
 /* topbar */
-.topbar { background: var(--c-primary); color: #fff; padding: 0 20px;
+.topbar { background: var(--c-topbar); color: #fff; padding: 0 20px;
           display: flex; align-items: center; justify-content: space-between;
-          height: 52px; gap: 12px; }
-.topbar-left  { display: flex; align-items: center; gap: 10px; }
-.topbar-logo  { height: 44px; width: auto; filter: drop-shadow(0 1px 3px rgba(0,0,0,.4)) brightness(1.2); }
-.fleet-name   { font-size: 17px; font-weight: 700; color: #fff; }
+          height: 56px; gap: 12px; }
+.topbar-left  { display: flex; align-items: center; gap: 12px; }
+.topbar-logo  { height: 50px; width: auto; filter: drop-shadow(0 1px 3px rgba(0,0,0,.4)) brightness(1.2); }
+.fleet-name   { font-size: 19px; font-weight: 700; color: #fff; }
 .topbar-nav   { display: flex; align-items: center; gap: 4px; }
 .topbar-nav a, .topbar-nav button {
-  color: rgba(255,255,255,.75); font-size: 13px; font-weight: 500;
-  text-decoration: none; padding: 6px 10px; border-radius: 6px;
+  color: rgba(255,255,255,.80); font-size: 14px; font-weight: 500;
+  text-decoration: none; padding: 7px 12px; border-radius: 6px;
   background: transparent; border: none; cursor: pointer;
   transition: background .15s, color .15s; }
 .topbar-nav a:hover, .topbar-nav button:hover
                      { background: rgba(255,255,255,.15); color: #fff; }
 .topbar-nav a.active { background: rgba(255,255,255,.2);  color: #fff; }
-.theme-btn { font-size: 16px; padding: 5px 9px !important; }
+.theme-btn { font-size: 17px; padding: 5px 10px !important; }
 .sign-out  { opacity: .65; }
 
 /* layout */
@@ -437,10 +438,12 @@ a { color: var(--c-primary); }  a:hover { color: var(--c-primary-lt); }
                align-items: center; margin-bottom: 12px; }
 .vm-name { font-size: 17px; font-weight: 700; }
 .badge { border-radius: 999px; padding: 3px 11px; font-size: 12px;
-         font-weight: 600; background: var(--c-border); color: var(--c-muted); }
-.badge.running     { background: var(--c-ok);  color: var(--c-ok-text); }
+         font-weight: 600; background: #6b7280; color: #fff; }
+.badge.running     { background: #16a34a; color: #fff; }
+.badge.provisioning, .badge.starting,
+.badge.stopping    { background: #d97706; color: #fff; }
 .badge.terminated,
-.badge.terminating { background: var(--c-err); color: var(--c-err-text); }
+.badge.terminating { background: #dc2626; color: #fff; }
 .card p   { margin: 4px 0; font-size: 14px; }
 .card p b { color: var(--c-muted); font-weight: 600; }
 .notes    { color: var(--c-muted); font-size: 13px; margin-top: 8px; }
@@ -473,7 +476,8 @@ a { color: var(--c-primary); }  a:hover { color: var(--c-primary-lt); }
             background: var(--c-bg); border: 1px solid var(--c-border);
             color: var(--c-text); text-decoration: none; }
 .vmbar a:hover, .svcbar a:hover { background: var(--c-primary-lt); color: #fff; }
-.vmbar a.active, .svcbar a.active { background: var(--c-primary); color: #fff; }
+.vmbar a.active { background: var(--c-accent); color: #1a1a1a; font-weight: 700; }
+.svcbar a.active { background: var(--c-accent); color: #1a1a1a; font-weight: 700; }
 
 /* pre/code */
 pre { background: var(--c-code-bg); color: var(--c-code-text);
@@ -491,7 +495,7 @@ label { font-size: 13px; color: var(--c-text);
 
 /* settings panel */
 .settings-panel {
-  position: fixed; top: 52px; right: 0; width: 220px;
+  position: fixed; top: 56px; right: 0; width: 220px;
   background: var(--c-card); border-left: 1px solid var(--c-border);
   border-bottom: 1px solid var(--c-border); border-radius: 0 0 0 12px;
   padding: 16px; box-shadow: -4px 4px 16px #0002; z-index: 100; }
@@ -528,6 +532,40 @@ label { font-size: 13px; color: var(--c-text);
               border-radius: 10px; padding: 20px; font-size: 13px;
               overflow-x: auto; white-space: pre-wrap; color: var(--c-text); }
 footer { text-align: center; font-size: 12px; color: var(--c-muted); padding: 20px 16px; }
+
+/* service chips on VM cards */
+.svc-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--c-border); }
+.svc-label   { font-size: 11px; color: var(--c-muted); font-weight: 600; margin: 0 0 6px;
+               text-transform: uppercase; letter-spacing: .4px; }
+.svc-chips   { display: flex; flex-wrap: wrap; gap: 5px; }
+.svc-chip    { font-size: 11px; padding: 2px 9px; border-radius: 5px; text-decoration: none;
+               background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-muted);
+               transition: background .12s, color .12s; }
+.svc-chip:hover { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+
+/* tools page */
+.tools-grid  { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill,minmax(200px,1fr)); margin-bottom: 20px; }
+.payload-card { background: var(--c-card); border: 1px solid var(--c-border); border-radius: 10px;
+                padding: 14px 16px; cursor: pointer; transition: border-color .15s; }
+.payload-card:hover, .payload-card.selected { border-color: var(--c-primary); }
+.payload-card.selected { box-shadow: 0 0 0 2px var(--c-primary); }
+.payload-title { font-size: 13px; font-weight: 700; margin: 0 0 4px; }
+.payload-desc  { font-size: 12px; color: var(--c-muted); margin: 0; line-height: 1.4; }
+.script-editor { width: 100%; min-height: 160px; font-family: monospace; font-size: 12.5px;
+                 background: var(--c-code-bg); color: var(--c-code-text); border: 1px solid var(--c-border);
+                 border-radius: 8px; padding: 12px; resize: vertical; }
+.run-bar       { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.vm-select     { padding: 7px 12px; border-radius: 7px; border: 1px solid var(--c-border);
+                 background: var(--c-card); color: var(--c-text); font-size: 13px; }
+
+/* mobile topbar */
+@media (max-width: 640px) {
+  .fleet-name { display: none; }
+  .topbar { padding: 0 10px; height: 50px; }
+  .topbar-logo { height: 40px; }
+  .topbar-nav a[href="/export"] { display: none; }
+  .topbar-nav a, .topbar-nav button { padding: 5px 7px; font-size: 13px; }
+}
 """
 
 THEME_JS = """
@@ -608,6 +646,47 @@ _LOG_SERVICES = [
     ("cloud-lab-update",       "Update"),
 ]
 
+_ROLE_SERVICES: dict[str, list[tuple[str, str]]] = {
+    "management": [
+        ("cloud-lab-orchestrator", "Orchestrator"),
+        ("cloud-lab-console",      "Console"),
+        ("cloud-lab-heartbeat",    "Heartbeat · 12h"),
+        ("cloud-lab-crosswatch",   "Crosswatch · 6h"),
+        ("cloud-lab-update",       "Auto-update · nightly"),
+    ],
+    "worker": [
+        ("cloud-lab-a1-lottery",   "A1 Lottery"),
+        ("cloud-lab-heartbeat",    "Heartbeat"),
+        ("cloud-lab-crosswatch",   "Crosswatch"),
+    ],
+    "laboratory": [
+        ("cloud-lab-heartbeat",    "Heartbeat"),
+    ],
+}
+
+_PAYLOAD_PRESETS = [
+    ("update-fleet",
+     "Update fleet code",
+     "Pull latest from GitHub and restart changed services.",
+     "set -euo pipefail\ngit -C ~/cloud-lab pull --ff-only\nsystemctl --user daemon-reload 2>/dev/null || true\necho 'Update complete.'"),
+    ("restart-services",
+     "Restart all fleet services",
+     "Restart every cloud-lab-* systemd service.",
+     "set -euo pipefail\nsudo systemctl restart 'cloud-lab-*'\necho 'Services restarted.'"),
+    ("status-check",
+     "Service status report",
+     "Show status of all fleet services.",
+     "sudo systemctl status 'cloud-lab-*' --no-pager 2>&1 || true"),
+    ("disk-cleanup",
+     "Disk cleanup",
+     "Remove orphaned packages, apt cache, old logs.",
+     "set -euo pipefail\nsudo apt-get autoremove -y -qq\nsudo apt-get clean\nsudo journalctl --vacuum-time=7d\ndf -h /"),
+    ("heartbeat-test",
+     "Force heartbeat",
+     "Trigger an immediate heartbeat to management.",
+     "python3 ~/cloud-lab/payload/keepalive/health_check.py 2>&1 || true"),
+]
+
 
 # ── shared HTML helpers ───────────────────────────────────────────────────────
 
@@ -632,6 +711,7 @@ def _topbar(active: str = "") -> str:
         ("Fleet",  "/",       "fleet"),
         ("Stats",  "/stats",  "stats"),
         ("Logs",   "/logs",   "logs"),
+        ("Tools",  "/tools",  "tools"),
         ("Export", "/export", "export"),
     ]
     links = " ".join(
@@ -706,11 +786,30 @@ def vm_cards() -> str:
                 f'<button class="act-btn" onclick="copyText({json.dumps(raw_cmd)},this)">Copy SSH</button>'
             )
 
+        role = vm.get("role", "")
         lottery_link = ""
-        if vm.get("role") == "worker":
+        if role == "worker":
             lottery_link = (
                 f'<a class="act-btn accent" '
                 f'href="/logs?vm={html.escape(name)}&service=cloud-lab-a1-lottery">Lottery logs</a>'
+            )
+
+        services = _ROLE_SERVICES.get(role, []) + [
+            (svc, label) for svc, label in vm.get("services", [])
+            if svc not in {s for s, _ in _ROLE_SERVICES.get(role, [])}
+        ]
+        svc_html = ""
+        if services:
+            chips = " ".join(
+                f'<a class="svc-chip" href="/logs?vm={html.escape(name)}&service={html.escape(svc)}">'
+                f'{html.escape(label)}</a>'
+                for svc, label in services
+            )
+            svc_html = (
+                f'<div class="svc-section">'
+                f'<p class="svc-label">Background services</p>'
+                f'<div class="svc-chips">{chips}</div>'
+                f'</div>'
             )
 
         cards.append(
@@ -719,7 +818,7 @@ def vm_cards() -> str:
             f'<span class="vm-name">{html.escape(name)}</span>'
             f'<span class="badge {html.escape(sc)}">{html.escape(state)}</span>'
             f'</div>'
-            f'<p><b>Role:</b> {html.escape(vm.get("role", ""))}</p>'
+            f'<p><b>Role:</b> {html.escape(role)}</p>'
             f'<p><b>Shape:</b> {shape}</p>'
             f'<p{uptime_cls}><b>Uptime:</b> {uptime_str}</p>'
             f'<p><b>Public IP:</b> {html.escape(public_ip)}</p>'
@@ -730,9 +829,12 @@ def vm_cards() -> str:
             f'<div class="card-actions">'
             f'<a class="act-btn" href="/stats?vm={html.escape(name)}">Live stats</a>'
             f'<a class="act-btn" href="/logs?vm={html.escape(name)}">Logs</a>'
+            f'<a class="act-btn" href="/tools?vm={html.escape(name)}">Tools</a>'
             f'{lottery_link}'
             f'{ssh_copy}'
-            f'</div></div>'
+            f'</div>'
+            f'{svc_html}'
+            f'</div>'
         )
     return "\n".join(cards) if cards else "<p>No VMs defined in fleet.json.</p>"
 
@@ -848,6 +950,115 @@ def export_page() -> bytes:
     return page.encode("utf-8")
 
 
+def tools_page(selected_vm: str, fleet_vms: list) -> bytes:
+    title = f"{FLEET_NAME} — Tools"
+    vm_opts = " ".join(
+        f'<option value="{html.escape(v)}" {"selected" if v == selected_vm else ""}>'
+        f'{html.escape(v)}</option>'
+        for v in fleet_vms
+    )
+    preset_cards = "\n".join(
+        f'<div class="payload-card" id="preset-{slug}" onclick="selectPreset({json.dumps(slug)},{json.dumps(script)})">'
+        f'<p class="payload-title">{html.escape(label)}</p>'
+        f'<p class="payload-desc">{html.escape(desc)}</p>'
+        f'</div>'
+        for slug, label, desc, script in _PAYLOAD_PRESETS
+    )
+    page = (
+        _head(title)
+        + _topbar("tools")
+        + f'<div class="content" style="max-width:800px">'
+        + f'<p class="section-title">Preset Payloads</p>'
+        + f'<div class="tools-grid">{preset_cards}'
+        + f'<div class="payload-card" id="preset-custom" onclick="selectPreset(\'custom\',\'\')">'
+        + f'<p class="payload-title">Custom script</p>'
+        + f'<p class="payload-desc">Write or paste your own bash script below.</p>'
+        + f'</div></div>'
+        + f'<p class="section-title">Script</p>'
+        + f'<textarea class="script-editor" id="script-editor" spellcheck="false"'
+        + f' placeholder="#!/bin/bash\n# Script runs on the selected VM via SSH"></textarea>'
+        + f'<div class="run-bar">'
+        + f'<select class="vm-select" id="vm-select">{vm_opts}</select>'
+        + f'<button class="btn" onclick="runPayload()">&#9654; Run on VM</button>'
+        + f'<span id="run-status" style="font-size:13px;color:var(--c-muted)"></span>'
+        + f'</div>'
+        + f'<p class="section-title" id="output-title" style="display:none">Output</p>'
+        + f'<pre id="output-pre" style="display:none"></pre>'
+        + f'</div>'
+        + "<script>"
+        + "var _selectedPreset = null;"
+        + "function selectPreset(slug, script) {"
+        + "  document.querySelectorAll('.payload-card').forEach(function(c) { c.classList.remove('selected'); });"
+        + "  document.getElementById('preset-'+slug).classList.add('selected');"
+        + "  _selectedPreset = slug;"
+        + "  if (script) document.getElementById('script-editor').value = script;"
+        + "}"
+        + "function runPayload() {"
+        + "  var script = document.getElementById('script-editor').value.trim();"
+        + "  var vm     = document.getElementById('vm-select').value;"
+        + "  if (!script) { document.getElementById('run-status').textContent = 'Paste or select a script first.'; return; }"
+        + "  var status = document.getElementById('run-status');"
+        + "  status.textContent = 'Running on ' + vm + '...';"
+        + "  status.style.color = 'var(--c-muted)';"
+        + "  var outTitle = document.getElementById('output-title');"
+        + "  var outPre   = document.getElementById('output-pre');"
+        + "  outTitle.style.display = 'none'; outPre.style.display = 'none';"
+        + "  fetch('/run-payload', {"
+        + "    method: 'POST',"
+        + "    headers: {'Content-Type': 'application/json'},"
+        + "    body: JSON.stringify({vm: vm, script: script})"
+        + "  }).then(function(r) { return r.json(); }).then(function(d) {"
+        + "    status.textContent = d.exit_code === 0 ? 'Done (' + vm + ')' : 'Exit code ' + d.exit_code + ' (' + vm + ')';"
+        + "    status.style.color = d.exit_code === 0 ? 'var(--c-ok-text)' : 'var(--c-err-text)';"
+        + "    outPre.textContent = d.output || '(no output)';"
+        + "    outTitle.style.display = ''; outPre.style.display = '';"
+        + "  }).catch(function(e) {"
+        + "    status.textContent = 'Request failed: ' + e.message;"
+        + "  });"
+        + "}"
+        + "</script>"
+        + '</body></html>'
+    )
+    return page.encode("utf-8")
+
+
+def run_payload_on_vm(vm_name: str, script: str) -> tuple[int, str]:
+    """SSH to vm_name and run script; returns (exit_code, output)."""
+    if vm_name == "management":
+        try:
+            result = subprocess.run(
+                ["bash", "-s"],
+                input=script, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                timeout=60,
+            )
+            return result.returncode, result.stdout or "(no output)"
+        except Exception as exc:
+            return 1, f"Local exec error: {exc}"
+    env      = _mgmt_env()
+    ssh_key  = env.get("OCI_SSH_PRIVATE_KEY_PATH", str(Path.home() / ".ssh" / "fleet.key"))
+    ssh_user = env.get("OCI_SSH_USER", "ubuntu")
+    profile  = load_json(TOOLS_DIR / "vm-profiles" / f"{vm_name}.json") or {}
+    public_ip = profile.get("public_ip", "")
+    if not public_ip:
+        return 1, f"No public IP for {vm_name}."
+    try:
+        result = subprocess.run(
+            ["ssh", "-i", str(Path(ssh_key).expanduser()),
+             "-o", "StrictHostKeyChecking=accept-new",
+             "-o", "ConnectTimeout=10", "-o", "BatchMode=yes",
+             f"{ssh_user}@{public_ip}", "bash -s"],
+            input=script, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=60,
+        )
+        return result.returncode, result.stdout or "(no output)"
+    except subprocess.TimeoutExpired:
+        return 1, "SSH timed out (60s)."
+    except Exception as exc:
+        return 1, f"SSH error: {exc}"
+
+
 def login_page(error: bool = False, locked: bool = False) -> bytes:
     if locked:
         err = '<p class="error-msg">Too many failed attempts. Try again in 15 minutes.</p>'
@@ -918,6 +1129,12 @@ class Handler(BaseHTTPRequestHandler):
             known = {s for s, _ in _LOG_SERVICES}
             if svc not in known: svc = "cloud-lab-a1-lottery"
             self._html(200, logs_page(vm, svc, names))
+        elif path == "/tools":
+            fleet = load_json(TOOLS_DIR / "fleet.json") or {"vms": []}
+            names = [v.get("name", "") for v in fleet.get("vms", []) if v.get("name")]
+            vm    = (qs.get("vm") or ["management"])[0]
+            if vm not in names: vm = names[0] if names else "management"
+            self._html(200, tools_page(vm, names))
         else:
             self._html(200, fleet_page())
 
@@ -945,6 +1162,30 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 _record_fail(client_ip)
                 self._html(401, login_page(error=True))
+
+        elif path == "/run-payload":
+            if not _is_authed(self):
+                self._respond(403, b'{"error":"not authenticated"}'); return
+            try:
+                data   = json.loads(body) if body else {}
+                vm     = str(data.get("vm", "management"))
+                script = str(data.get("script", ""))
+                fleet  = load_json(TOOLS_DIR / "fleet.json") or {"vms": []}
+                names  = {v.get("name") for v in fleet.get("vms", []) if v.get("name")}
+                if vm not in names:
+                    self._respond(400, b'{"error":"unknown vm"}'); return
+                if not script.strip():
+                    self._respond(400, b'{"error":"empty script"}'); return
+                exit_code, output = run_payload_on_vm(vm, script)
+                result = json.dumps({"exit_code": exit_code, "output": output}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers(); self.wfile.write(result)
+            except Exception as exc:
+                err = json.dumps({"exit_code": 1, "output": f"Error: {exc}"}).encode("utf-8")
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers(); self.wfile.write(err)
 
         elif path == "/heartbeat":
             try:   data = json.loads(body) if body else {}

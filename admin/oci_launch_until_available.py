@@ -150,10 +150,12 @@ def run_oci(
     timeout_seconds: int,
     heartbeat_seconds: int,
     label: str = "OCI command",
+    verbose: bool = True,
 ) -> tuple[int, str, str, bool]:
     oci = oci_executable()
-    log(f"{label}: using OCI CLI at {oci}")
-    log(f"{label}: running {redacted_command(args)}")
+    if verbose:
+        log(f"{label}: using OCI CLI at {oci}")
+        log(f"{label}: running {redacted_command(args)}")
 
     process = subprocess.Popen(
         [oci, *args],
@@ -198,6 +200,7 @@ def run_oci_json(
     timeout_seconds: int,
     heartbeat_seconds: int,
     label: str = "OCI command",
+    verbose: bool = True,
 ) -> Any:
     code, stdout, stderr, _ = run_oci(
         args,
@@ -205,6 +208,7 @@ def run_oci_json(
         timeout_seconds=timeout_seconds,
         heartbeat_seconds=heartbeat_seconds,
         label=label,
+        verbose=verbose,
     )
     if code != 0:
         raise RetryError((stdout + " " + stderr).strip())
@@ -404,7 +408,7 @@ def search_query_literal(value: str) -> str:
     return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
-def resource_search_instance(config: dict[str, Any]) -> dict[str, Any] | None:
+def resource_search_instance(config: dict[str, Any], verbose: bool = True) -> dict[str, Any] | None:
     """Find an instance by display name via OCI Resource Search."""
     name = config["instance_display_name"]
     query = f"query instance resources where displayName = '{search_query_literal(name)}'"
@@ -416,6 +420,7 @@ def resource_search_instance(config: dict[str, Any]) -> dict[str, Any] | None:
         timeout_seconds=60,
         heartbeat_seconds=int(config.get("oci_heartbeat_seconds", 15)),
         label="Pre-flight resource search",
+        verbose=verbose,
     )
     for item in data.get("data", {}).get("items", []):
         display_name = item.get("display-name") or item.get("displayName")
@@ -431,10 +436,11 @@ def resource_search_instance(config: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def find_active_instance(config: dict[str, Any]) -> dict[str, Any] | None:
+def find_active_instance(config: dict[str, Any], verbose: bool = True) -> dict[str, Any] | None:
     """Return an existing non-terminated instance with this display name, if any."""
-    log(f"Pre-flight: searching OCI for existing '{config['instance_display_name']}'.")
-    return resource_search_instance(config)
+    if verbose:
+        log(f"Pre-flight: searching OCI for existing '{config['instance_display_name']}'.")
+    return resource_search_instance(config, verbose=verbose)
 
 
 def instance_already_active(config: dict[str, Any]) -> bool:
@@ -449,18 +455,23 @@ def instance_already_active(config: dict[str, Any]) -> bool:
 
 def wait_for_active_instance(config: dict[str, Any], timeout_seconds: int = 600) -> dict[str, Any] | None:
     """Poll OCI for a possibly-created instance after a client timeout or retryable error."""
+    checks = timeout_seconds // 15
+    log(f"Polling OCI for '{config['instance_display_name']}' (up to {checks} checks, 15s apart)...")
     deadline = time.monotonic() + timeout_seconds
+    check_num = 0
     while time.monotonic() < deadline:
+        check_num += 1
         try:
-            item = find_active_instance(config)
+            item = find_active_instance(config, verbose=False)
         except Exception as exc:
-            log(f"Post-launch status check failed ({exc}); retrying before launching again.")
+            log(f"  Poll {check_num}: check failed ({exc}); retrying.")
             item = None
         if item:
-            log(f"Found '{config['instance_display_name']}' in OCI "
+            log(f"  Poll {check_num}: found '{config['instance_display_name']}' "
                 f"({item.get('lifecycle-state', 'UNKNOWN')}) — stopping retry loop.")
             return item
         time.sleep(15)
+    log(f"  Polling timed out after {check_num} checks — instance not found.")
     return None
 
 
