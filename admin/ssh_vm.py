@@ -5,10 +5,11 @@ SSH into a fleet VM by name.
 Usage:
   ssh-vm.bat management          open interactive shell
   ssh-vm.bat worker              open interactive shell
-  ssh-vm.bat laboratory -- <cmd>     run one command and exit
+  ssh-vm.bat laboratory          open interactive shell
+  ssh-vm.bat worker -- uptime    run one command and exit
 
 IP resolution order:
-  1. OCI_<NAME_SLUG>_HOST in .env  (e.g. OCI_MANAGEMENT_HOST, OCI_LABORATORY_HOST)
+  1. OCI_<NAME_SLUG>_HOST in .env  (e.g. OCI_MANAGEMENT_HOST, OCI_WORKER_HOST)
   2. public_ip in vm-profiles/<name>.json  (written by check-all-vms)
   3. Bail with instructions.
 """
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -96,12 +98,19 @@ def main() -> int:
     if not ip:
         env_key = f"OCI_{name.upper().replace('-', '_')}_HOST"
         print(f"No IP found for '{name}'.")
-        print(f"  Set {env_key} in .env")
-        print(f"  — or run check-all-vms to refresh vm-profiles/.")
+        print(f"  Option 1: add this line to .env:  {env_key}=<public-ip>")
+        print(f"  Option 2: run check-all-vms.bat to refresh vm-profiles/")
+        return 1
+
+    ssh_exe = shutil.which("ssh") or r"C:\Windows\System32\OpenSSH\ssh.exe"
+    if not shutil.which("ssh") and not Path(r"C:\Windows\System32\OpenSSH\ssh.exe").exists():
+        print("Error: 'ssh' not found in PATH.")
+        print("  Enable it via: Settings > Apps > Optional Features > OpenSSH Client")
+        print(f"  Or install Git for Windows, which includes ssh.")
         return 1
 
     cmd = [
-        "ssh", "-i", str(key),
+        ssh_exe, "-i", str(key),
         "-o", "StrictHostKeyChecking=accept-new",
         "-o", "ConnectTimeout=10",
         f"{user}@{ip}",
@@ -109,7 +118,11 @@ def main() -> int:
     ]
 
     print(f"[ssh] {name} ({ip}) as {user}")
-    return subprocess.run(cmd).returncode
+    try:
+        return subprocess.run(cmd).returncode
+    except FileNotFoundError:
+        print(f"Error: ssh executable not found: {ssh_exe}")
+        return 1
 
 
 if __name__ == "__main__":
