@@ -8,10 +8,10 @@ if "%~1"=="" (
     echo   e.g.: ssh-vm.bat worker -- uptime
     echo.
     echo VMs: management, worker, laboratory
-    if not defined PROMPT pause
+    pause
     exit /b 1
 )
 python "%SCRIPT_DIR%ssh_vm.py" %*
 if errorlevel 1 (
-    if not defined PROMPT pause
+    pause
 )
