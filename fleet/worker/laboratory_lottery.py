@@ -38,6 +38,7 @@ def laboratory_active() -> bool:
     env = os.environ.copy()
     env["OCI_CLI_AUTH"] = "instance_principal"
     env["OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING"] = "True"
+    env["PYTHONWARNINGS"] = "ignore::FutureWarning"
     try:
         result = subprocess.run(
             [oci, "compute", "instance", "list",
@@ -49,7 +50,7 @@ def laboratory_active() -> bool:
         if result.returncode != 0:
             log(f"OCI status check failed: {result.stderr.strip()}")
             return False
-        data = json.loads(result.stdout)
+        data = json.loads(result.stdout) if result.stdout.strip() else {"data": []}
         for item in data.get("data", []):
             state = item.get("lifecycle-state", "")
             if state not in ("TERMINATING", "TERMINATED"):

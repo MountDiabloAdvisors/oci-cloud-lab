@@ -76,6 +76,7 @@ def oci_cmd(args: list[str]) -> dict[str, Any]:
     child_env = os.environ.copy()
     child_env["OCI_CLI_AUTH"] = "instance_principal"
     child_env["OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING"] = "True"
+    child_env["PYTHONWARNINGS"] = "ignore::FutureWarning"
     result = subprocess.run(
         [oci, *args],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -84,6 +85,8 @@ def oci_cmd(args: list[str]) -> dict[str, Any]:
     )
     if result.returncode != 0:
         raise RuntimeError((result.stdout + " " + result.stderr).strip())
+    if not result.stdout.strip():
+        return {"data": []}
     return json.loads(result.stdout)
 
 
@@ -315,6 +318,11 @@ def check_and_repair_fleet(fleet: list[dict[str, Any]], env: dict[str, str]) -> 
             continue
 
         log(f"{name} public IP: {public_ip}")
+        if not vm.get("first_contact", False):
+            ntfy(ntfy_topic, f"{fleet_name}: {name} is live",
+                 f"{name} launched with cloud-init. IP: {public_ip}", tags="rocket,white_check_mark", server=ntfy_server)
+            continue
+
         ok = run_first_contact(public_ip, name, role, env)
 
         if ok:
