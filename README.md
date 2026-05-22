@@ -117,8 +117,11 @@ from your machine at any time:
 **Windows:** `admin\check-all-vms.bat`
 **Mac/Linux:** `bash admin/check-all-vms.sh`
 
-Or just watch the admin console — it auto-refreshes every 60 seconds and shows
-live VM state and heartbeat times.
+Or just watch the admin console — it auto-refreshes every 60 seconds and shows live
+VM state, heartbeat times, uptime, and links to log streams for each background service.
+The console has a dark/light mode toggle, color palette presets, and a **Tools** page
+where you can pick preset scripts or write your own and run them on any fleet VM
+directly from the browser.
 
 ---
 
@@ -144,9 +147,9 @@ All scripts are in `admin/`. Run them from the repo root. `.bat` for Windows,
 Three VMs, two shapes — all within Oracle's Always Free tier:
 
 ```
-management   VM.Standard.E2.1.Micro    Orchestrator · admin console · heartbeat · crosswatch
-worker       VM.Standard.E2.1.Micro    General compute — available for your workloads
-laboratory   VM.Standard.A1.Flex       4 OCPU / 24 GB RAM — MDA dashboard host
+management   VM.Standard.E2.1.Micro   Orchestrator · admin console · heartbeat · crosswatch
+worker       VM.Standard.E2.1.Micro   A1 lottery runner · general compute while waiting
+laboratory   VM.Standard.A1.Flex      4 OCPU / 24 GB RAM — MDA dashboard host
 ```
 
 VM configuration is in `fleet.json` (committed, safe to edit). Role-specific
@@ -247,7 +250,7 @@ Let's Encrypt cert. Wait 60 seconds and reload.
 
 **Admin console not loading at all** — check Caddy on the management VM:
 ```bash
-bash admin/ssh-vm.sh management
+bash admin/ssh-vm.sh management  # or: admin\ssh-vm.bat management (Windows)
 sudo systemctl status caddy
 sudo journalctl -u caddy -n 50
 ```
@@ -256,7 +259,7 @@ sudo journalctl -u caddy -n 50
 
 **Worker or laboratory stuck as NOT FOUND** — the orchestrator is working on it. Check:
 ```bash
-bash admin/ssh-vm.sh management
+bash admin/ssh-vm.sh management  # or: admin\ssh-vm.bat management (Windows)
 journalctl -u cloud-lab-orchestrator -f
 ```
 
