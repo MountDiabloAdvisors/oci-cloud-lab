@@ -8,7 +8,8 @@ Endpoints:
   GET  /login               Login form
   POST /login               Validate credentials, set session cookie, redirect to /
   GET  /logout              Clear session, redirect to /login
-  POST /heartbeat           Liveness pings from worker/laboratory (no auth)
+  POST /heartbeat           Liveness pings from worker/laboratory (Bearer token if configured)
+  GET  /health              Liveness probe for UptimeRobot (no auth, JSON response)
   GET  /export              Fleet connection details (login required)
   GET  /stats?vm=<name>     Live system stats (login required)
   GET  /logs?vm=<name>&service=<svc>  Journalctl logs (login required)
@@ -55,6 +56,10 @@ PROFILE_DIR     = TOOLS_DIR / "vm-profiles"
 HEARTBEATS_FILE = TOOLS_DIR / "vm-profiles" / "_heartbeats.json"
 AUDIT_LOG        = TOOLS_DIR / "logs" / "audit.jsonl"
 QUEUE_API_KEY    = os.getenv("QUEUE_API_KEY", "")
+HEARTBEAT_TOKEN  = os.getenv("FLEET_HEARTBEAT_TOKEN", "")
+
+MAX_API_BODY       = 65_536   # bytes — POST body limit for general API endpoints
+MAX_HEARTBEAT_BODY = 16_384   # bytes — tighter limit for heartbeat posts
 
 COOKIE_NAME      = "fleet_session"
 SESSION_DURATION = 7 * 24 * 3600   # 7 days
@@ -390,9 +395,20 @@ def _is_api_authed(handler: "BaseHTTPRequestHandler") -> bool:
         return True
     if QUEUE_API_KEY:
         auth = handler.headers.get("Authorization", "")
-        if auth.startswith("Bearer ") and auth[7:].strip() == QUEUE_API_KEY:
+        if auth.startswith("Bearer ") and secrets.compare_digest(auth[7:].strip(), QUEUE_API_KEY):
             return True
     return False
+
+
+def _is_heartbeat_authed(handler: "BaseHTTPRequestHandler") -> bool:
+    """Require a shared heartbeat token when FLEET_HEARTBEAT_TOKEN is configured.
+
+    Empty token keeps existing deployments compatible — new installs should set it.
+    """
+    if not HEARTBEAT_TOKEN:
+        return True
+    auth = handler.headers.get("Authorization", "")
+    return auth.startswith("Bearer ") and secrets.compare_digest(auth[7:].strip(), HEARTBEAT_TOKEN)
 
 
 def _write_audit(action: str, vm: str, details: str,
@@ -1542,9 +1558,28 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._html(200, fleet_page())
 
+    def _read_body(self, limit: int) -> bytes | None:
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            return None
+        if length < 0 or length > limit:
+            return None
+        return self.rfile.read(length)
+
+    def _read_json_body(self, limit: int) -> dict | None:
+        body = self._read_body(limit)
+        if body is None:
+            return None
+        try:
+            data = json.loads(body)
+            return data if isinstance(data, dict) else None
+        except Exception:
+            return None
+
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
-        body   = self.rfile.read(length) if length else b""
+        body   = self.rfile.read(min(length, MAX_API_BODY)) if length else b""
         path   = urlparse(self.path).path.rstrip("/")
 
         if path == "/login":
@@ -1659,24 +1694,27 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body_out)
 
         elif path == "/heartbeat":
-            try:   data = json.loads(body) if body else {}
-            except Exception: data = {}
-            sender = str(data.get("vm_name", "unknown"))
+            if not _is_heartbeat_authed(self):
+                self._respond(403, b'{"ok":false}'); return
+            data = self._read_json_body(MAX_HEARTBEAT_BODY)
+            if data is None:
+                self._respond(400, b'{"ok":false}'); return
+            sender = str(data.get("vm_name") or data.get("vm") or "unknown")[:64]
             now    = datetime.now(timezone.utc).isoformat()
             with _hb_lock:
                 existing = _heartbeats.get(sender, {})
                 events   = list(existing.get("events", []))
                 event    = data.get("event")
                 if event:
-                    events.append({"received_at": now, "event": str(event),
+                    events.append({"received_at": now, "event": str(event)[:200],
                                    "details": data.get("details", {})})
-                    events = events[-20:]
+                    events = events[-50:]
                 _heartbeats[sender] = {
-                    "received_at": now, "uptime": str(data.get("uptime", "?")),
+                    "received_at": now, "uptime": str(data.get("uptime", "?"))[:80],
                     "extra": data, "events": events,
                 }
             save_heartbeats()
-            self._respond(200, b"ok")
+            self._respond(200, b'{"ok":true}')
         else:
             self._respond(404, b"Not found")
 
