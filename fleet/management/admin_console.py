@@ -62,6 +62,9 @@ _sessions_lock = threading.Lock()
 _heartbeats: dict[str, dict] = {}
 _hb_lock = threading.Lock()
 
+_last_oci_snap: float = 0.0
+_SNAP_TTL: float = 300.0   # seconds between OCI API refreshes
+
 _login_fails: dict[str, tuple[int, float]] = {}
 _fails_lock  = threading.Lock()
 MAX_LOGIN_ATTEMPTS = 5
@@ -214,6 +217,12 @@ def get_vnic_ips(instance_id: str, compartment_id: str) -> tuple[str, str]:
 
 
 def refresh_oci_snapshots() -> None:
+    global _last_oci_snap
+    now = time.monotonic()
+    if now - _last_oci_snap < _SNAP_TTL:
+        return   # cached snapshot is fresh enough
+    _last_oci_snap = now
+
     env = _mgmt_env()
     compartment_id = env.get("OCI_COMPARTMENT_ID", "")
     if not compartment_id:
@@ -317,7 +326,6 @@ def collect_local_stats() -> str:
 
 
 def collect_remote_stats(vm_name: str) -> str:
-    refresh_oci_snapshots()
     return _ssh_run(vm_name, _STATS_CMD, timeout=20)
 
 
@@ -335,7 +343,6 @@ def collect_local_logs(service: str, lines: int = 200) -> str:
 
 
 def collect_remote_logs(vm_name: str, service: str, lines: int = 200) -> str:
-    refresh_oci_snapshots()
     cmd = f"sudo journalctl -u {shlex.quote(service)} -n {lines} --no-pager --output=short-iso 2>&1"
     return _ssh_run(vm_name, cmd, timeout=20)
 
@@ -771,9 +778,20 @@ def vm_cards() -> str:
         hb_html    = ""
         uptime_cls = ""
 
-        if hb:
+        if name == "management":
+            # Management is the heartbeat server — it never heartbeats itself.
+            # Read uptime directly from /proc/uptime instead.
+            try:
+                secs = int(float(Path("/proc/uptime").read_text().split()[0]))
+                d, rem = divmod(secs, 86400)
+                h, rem = divmod(rem, 3600)
+                m = rem // 60
+                uptime_str = f"{d}d {h}h {m}m" if d else f"{h}h {m}m"
+            except Exception:
+                uptime_str = "—"
+        elif hb:
             hb_html = f'<p><b>Heartbeat:</b> {html.escape(fmt_ago(hb.get("received_at", "")))}</p>'
-        elif vm.get("role") != "management":
+        else:
             hb_html    = '<p class="warn-text"><b>Heartbeat:</b> not received yet</p>'
             uptime_cls = ' class="warn-text"'
 
@@ -812,12 +830,15 @@ def vm_cards() -> str:
                 f'</div>'
             )
 
+        notes = vm.get("notes", "")
+        notes_html = f'<p class="notes">{html.escape(notes)}</p>' if notes else ""
         cards.append(
             f'<div class="card">'
             f'<div class="card-header">'
             f'<span class="vm-name">{html.escape(name)}</span>'
             f'<span class="badge {html.escape(sc)}">{html.escape(state)}</span>'
             f'</div>'
+            f'{notes_html}'
             f'<p><b>Role:</b> {html.escape(role)}</p>'
             f'<p><b>Shape:</b> {shape}</p>'
             f'<p{uptime_cls}><b>Uptime:</b> {uptime_str}</p>'
@@ -825,7 +846,6 @@ def vm_cards() -> str:
             f'<p><b>Private IP:</b> {html.escape(private_ip)}</p>'
             f'<p><b>OCI snapshot:</b> {html.escape(synced_at)}</p>'
             f'{hb_html}'
-            f'<p class="notes">{html.escape(vm.get("notes", ""))}</p>'
             f'<div class="card-actions">'
             f'<a class="act-btn" href="/stats?vm={html.escape(name)}">Live stats</a>'
             f'<a class="act-btn" href="/logs?vm={html.escape(name)}">Logs</a>'
@@ -957,63 +977,88 @@ def tools_page(selected_vm: str, fleet_vms: list) -> bytes:
         f'{html.escape(v)}</option>'
         for v in fleet_vms
     )
+
+    # Build preset cards — onclick references a JS object keyed by slug.
+    # Scripts are stored in JS (not in HTML attributes) to avoid > < " escaping issues.
     preset_cards = "\n".join(
-        f'<div class="payload-card" id="preset-{slug}" onclick="selectPreset({json.dumps(slug)},{json.dumps(script)})">'
+        f'<div class="payload-card" id="preset-{html.escape(slug)}" onclick="selectPreset({json.dumps(slug)})">'
         f'<p class="payload-title">{html.escape(label)}</p>'
         f'<p class="payload-desc">{html.escape(desc)}</p>'
         f'</div>'
-        for slug, label, desc, script in _PAYLOAD_PRESETS
+        for slug, label, desc, _script in _PAYLOAD_PRESETS
     )
+
+    # Serialize scripts as a JS object — json.dumps handles all escaping.
+    scripts_js = "{" + ",".join(
+        f'{json.dumps(slug)}:{json.dumps(script)}'
+        for slug, _label, _desc, script in _PAYLOAD_PRESETS
+    ) + "}"
+
     page = (
         _head(title)
         + _topbar("tools")
         + f'<div class="content" style="max-width:800px">'
         + f'<p class="section-title">Preset Payloads</p>'
+        + f'<p style="font-size:13px;color:var(--c-muted);margin:0 0 12px">'
+        + f'Click a card to load its script, then choose a VM and click Run. '
+        + f'The script is sent over SSH and run as bash on the selected VM. '
+        + f'Management runs locally.</p>'
         + f'<div class="tools-grid">{preset_cards}'
-        + f'<div class="payload-card" id="preset-custom" onclick="selectPreset(\'custom\',\'\')">'
+        + f'<div class="payload-card" id="preset-custom" onclick="selectPreset(\'custom\')">'
         + f'<p class="payload-title">Custom script</p>'
-        + f'<p class="payload-desc">Write or paste your own bash script below.</p>'
+        + f'<p class="payload-desc">Write or paste your own bash script. '
+        + f'Runs via SSH on any fleet VM.</p>'
         + f'</div></div>'
         + f'<p class="section-title">Script</p>'
         + f'<textarea class="script-editor" id="script-editor" spellcheck="false"'
-        + f' placeholder="#!/bin/bash\n# Script runs on the selected VM via SSH"></textarea>'
+        + f' placeholder="#!/bin/bash&#10;# Click a preset above, or write your own script here.&#10;# This will be run via SSH on the VM you select below."></textarea>'
         + f'<div class="run-bar">'
         + f'<select class="vm-select" id="vm-select">{vm_opts}</select>'
-        + f'<button class="btn" onclick="runPayload()">&#9654; Run on VM</button>'
+        + f'<button class="btn" id="run-btn" onclick="runPayload()">&#9654; Run on VM</button>'
         + f'<span id="run-status" style="font-size:13px;color:var(--c-muted)"></span>'
         + f'</div>'
         + f'<p class="section-title" id="output-title" style="display:none">Output</p>'
         + f'<pre id="output-pre" style="display:none"></pre>'
         + f'</div>'
         + "<script>"
+        + f"var SCRIPTS = {scripts_js};"
         + "var _selectedPreset = null;"
-        + "function selectPreset(slug, script) {"
+        + "function selectPreset(slug) {"
         + "  document.querySelectorAll('.payload-card').forEach(function(c) { c.classList.remove('selected'); });"
-        + "  document.getElementById('preset-'+slug).classList.add('selected');"
+        + "  var card = document.getElementById('preset-'+slug);"
+        + "  if (card) card.classList.add('selected');"
         + "  _selectedPreset = slug;"
-        + "  if (script) document.getElementById('script-editor').value = script;"
+        + "  var editor = document.getElementById('script-editor');"
+        + "  if (slug === 'custom') { editor.value = ''; editor.focus(); }"
+        + "  else if (SCRIPTS[slug]) { editor.value = SCRIPTS[slug]; }"
         + "}"
         + "function runPayload() {"
         + "  var script = document.getElementById('script-editor').value.trim();"
         + "  var vm     = document.getElementById('vm-select').value;"
-        + "  if (!script) { document.getElementById('run-status').textContent = 'Paste or select a script first.'; return; }"
         + "  var status = document.getElementById('run-status');"
-        + "  status.textContent = 'Running on ' + vm + '...';"
+        + "  var btn    = document.getElementById('run-btn');"
+        + "  if (!script) { status.textContent = 'Select a preset or write a script first.'; return; }"
+        + "  btn.disabled = true; btn.textContent = 'Running…';"
+        + "  status.textContent = 'Running on ' + vm + '…';"
         + "  status.style.color = 'var(--c-muted)';"
-        + "  var outTitle = document.getElementById('output-title');"
-        + "  var outPre   = document.getElementById('output-pre');"
-        + "  outTitle.style.display = 'none'; outPre.style.display = 'none';"
+        + "  document.getElementById('output-title').style.display = 'none';"
+        + "  document.getElementById('output-pre').style.display = 'none';"
         + "  fetch('/run-payload', {"
         + "    method: 'POST',"
         + "    headers: {'Content-Type': 'application/json'},"
         + "    body: JSON.stringify({vm: vm, script: script})"
         + "  }).then(function(r) { return r.json(); }).then(function(d) {"
-        + "    status.textContent = d.exit_code === 0 ? 'Done (' + vm + ')' : 'Exit code ' + d.exit_code + ' (' + vm + ')';"
+        + "    btn.disabled = false; btn.textContent = '▶ Run on VM';"
+        + "    status.textContent = d.exit_code === 0 ? '✓ Done on ' + vm : '✗ Exit ' + d.exit_code + ' on ' + vm;"
         + "    status.style.color = d.exit_code === 0 ? 'var(--c-ok-text)' : 'var(--c-err-text)';"
-        + "    outPre.textContent = d.output || '(no output)';"
-        + "    outTitle.style.display = ''; outPre.style.display = '';"
+        + "    var pre = document.getElementById('output-pre');"
+        + "    pre.textContent = d.output || '(no output)';"
+        + "    document.getElementById('output-title').style.display = '';"
+        + "    pre.style.display = '';"
         + "  }).catch(function(e) {"
+        + "    btn.disabled = false; btn.textContent = '▶ Run on VM';"
         + "    status.textContent = 'Request failed: ' + e.message;"
+        + "    status.style.color = 'var(--c-err-text)';"
         + "  });"
         + "}"
         + "</script>"
