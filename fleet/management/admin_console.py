@@ -971,7 +971,7 @@ _PAYLOAD_PRESETS = [
     ("update-fleet",
      "Update fleet code",
      "Pull latest from GitHub and restart changed services.",
-     "set -euo pipefail\ngit -C ~/cloud-lab pull --ff-only\nsystemctl --user daemon-reload 2>/dev/null || true\necho 'Update complete.'"),
+     "set -euo pipefail\ngit -C \"$CLOUD_LAB_DIR\" pull --ff-only\nsudo systemctl daemon-reload 2>/dev/null || true\necho 'Update complete.'"),
     ("restart-services",
      "Restart all fleet services",
      "Restart every cloud-lab-* systemd service.",
@@ -987,7 +987,7 @@ _PAYLOAD_PRESETS = [
     ("heartbeat-test",
      "Force heartbeat",
      "Trigger an immediate heartbeat to management.",
-     "python3 ~/cloud-lab/payload/keepalive/health_check.py 2>&1 || true"),
+     "python3 \"$CLOUD_LAB_DIR/payload/keepalive/health_check.py\" 2>&1 || true"),
 ]
 
 
@@ -1033,8 +1033,10 @@ def _topbar(active: str = "") -> str:
     return (
         f'<div class="topbar">'
         f'<div class="topbar-left">'
+        f'<a href="/" style="display:flex;align-items:center;gap:10px;text-decoration:none">'
         f'<img src="data:image/png;base64,{TOPBAR_LOGO_B64}" alt="MDA" class="topbar-logo">'
         f'<span class="fleet-name">{html.escape(FLEET_NAME)}</span>'
+        f'</a>'
         f'</div>'
         f'<nav class="topbar-nav">{links}'
         f'<button class="theme-btn" title="Appearance" onclick="toggleSettings()">&#9881;</button>'
@@ -1398,6 +1400,15 @@ def tools_page(selected_vm: str, fleet_vms: list) -> bytes:
 
 def run_payload_on_vm(vm_name: str, script: str) -> tuple[int, str]:
     """SSH to vm_name and run script; returns (exit_code, output)."""
+    # Inject CLOUD_LAB_DIR so scripts never need to hardcode the repo path.
+    # Management: use the console's actual running directory (TOOLS_DIR).
+    # Other VMs: cloud-init always clones to ~/cloud-lab.
+    if vm_name == "management":
+        header = f"export CLOUD_LAB_DIR={shlex.quote(str(TOOLS_DIR))}\n"
+    else:
+        header = 'export CLOUD_LAB_DIR="$HOME/cloud-lab"\n'
+    script = header + script
+
     if vm_name == "management":
         try:
             result = subprocess.run(
@@ -1723,7 +1734,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._respond(400, b'{"error":"unknown vm"}'); return
                 # For management: enqueue locally. Others: SSH enqueue.
                 enqueue_cmd = (
-                    f"python3 ~/cloud-lab/payload/queue/queue_runner.py "
+                    f"python3 \"$CLOUD_LAB_DIR/payload/queue/queue_runner.py\" "
                     f"--enqueue --label {shlex.quote(label)} "
                     f"--command {shlex.quote(command)} --priority {priority}"
                 )
