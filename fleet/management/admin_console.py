@@ -431,12 +431,20 @@ def _mgmt_tls_html() -> str:
     import subprocess as _sp, time as _t, datetime as _dt
     rows = []
 
-    # TLS cert expiry — scan Caddy cert store
-    cert_root = Path.home() / ".local" / "share" / "caddy" / "certificates"
+    # TLS cert expiry — scan Caddy cert store.
+    # When Caddy runs as a system service (apt install), it runs as the 'caddy' user
+    # and stores certs under /var/lib/caddy, not ~/. Check both.
     cert_file: Path | None = None
-    if cert_root.exists():
-        for crt in sorted(cert_root.rglob("*.crt"), key=lambda p: p.stat().st_mtime, reverse=True):
-            cert_file = crt
+    for cert_root in [
+        Path.home() / ".local" / "share" / "caddy" / "certificates",
+        Path("/var/lib/caddy/.local/share/caddy/certificates"),
+        Path("/etc/caddy/certificates"),
+    ]:
+        if cert_root.exists():
+            for crt in sorted(cert_root.rglob("*.crt"), key=lambda p: p.stat().st_mtime, reverse=True):
+                cert_file = crt
+                break
+        if cert_file:
             break
     if cert_file:
         try:
@@ -482,6 +490,12 @@ def _update_quota_cache() -> None:
     compartment_id = env.get("OCI_COMPARTMENT_ID", "")
     if not compartment_id:
         return
+    # Always Free hard-coded maximums — stable since 2021, used as fallback.
+    _AF_MAX = {
+        "E2.Micro VMs": 2,
+        "A1 OCPUs":     4,
+        "A1 RAM (GB)":  24,
+    }
     limits = {}
     for limit_name, label in [
         ("standard-e2-micro-count",   "E2.Micro VMs"),
@@ -497,10 +511,10 @@ def _update_quota_cache() -> None:
             ], timeout=30).get("data", {})
             avail = data.get("available", "?")
             used  = data.get("used", "?")
-            quota = data.get("effective-quota-value", "?")
+            quota = data.get("effective-quota-value") or _AF_MAX.get(label, "?")
             limits[label] = {"used": used, "available": avail, "quota": quota}
         except Exception:
-            limits[label] = {"used": "?", "available": "?", "quota": "?"}
+            limits[label] = {"used": "?", "available": "?", "quota": _AF_MAX.get(label, "?")}
     _quota_cache    = limits
     _quota_cache_ts = now
 
@@ -618,12 +632,15 @@ body { font-family: system-ui,-apple-system,sans-serif; margin: 0;
 a { color: var(--c-primary); }  a:hover { color: var(--c-primary-lt); }
 
 /* topbar */
-.topbar { background: var(--c-topbar); color: var(--c-topbar-text, #fff); padding: 0 20px;
+.topbar { background: var(--c-topbar); color: var(--c-topbar-text, #fff); padding: 0 20px 0 0;
           display: flex; align-items: center; justify-content: space-between;
           height: 56px; gap: 12px; }
-.topbar-left  { display: flex; align-items: center; gap: 12px; }
+.topbar-left  { display: flex; align-items: center; gap: 0; }
 .topbar-logo  { height: 44px; width: auto; margin-bottom: -2px; }
-.fleet-name   { font-size: 19px; font-weight: 700; color: var(--c-topbar-text, #fff); }
+.fleet-name   { font-size: 17px; font-weight: 600; color: var(--c-topbar-text, #fff);
+                padding-left: 10px; }
+.fleet-subtitle { font-size: 13px; font-weight: 400; opacity: .70;
+                  padding-left: 6px; color: var(--c-topbar-text, #fff); }
 .topbar-nav   { display: flex; align-items: center; gap: 4px; }
 .topbar-nav a, .topbar-nav button {
   color: var(--c-topbar-text, #fff); opacity: .80; font-size: 14px; font-weight: 500;
@@ -634,7 +651,7 @@ a { color: var(--c-primary); }  a:hover { color: var(--c-primary-lt); }
                      { background: rgba(0,0,0,.10); opacity: 1; }
 .topbar-nav a.active, .topbar-nav a.active:hover
                      { background: rgba(0,0,0,.14); opacity: 1; font-weight: 700; }
-.theme-btn { font-size: 17px; padding: 5px 10px !important; }
+.theme-btn { font-size: 22px; padding: 5px 12px !important; }
 .sign-out  { opacity: .65; }
 
 /* layout */
@@ -1009,6 +1026,17 @@ def _head(title: str, auto_refresh: int = 0) -> str:
     )
 
 
+_PAGE_SUBTITLES: dict[str, str] = {
+    "fleet":  "Fleet Management",
+    "stats":  "VM Stats",
+    "logs":   "Log Stream",
+    "tools":  "Tools",
+    "export": "Export",
+    "queue":  "Job Queue",
+    "audit":  "Audit Log",
+}
+
+
 def _topbar(active: str = "") -> str:
     import json as _json
     nav_items = [
@@ -1033,10 +1061,11 @@ def _topbar(active: str = "") -> str:
     return (
         f'<div class="topbar">'
         f'<div class="topbar-left">'
-        f'<a href="/" style="display:flex;align-items:center;gap:10px;text-decoration:none">'
+        f'<a href="/" style="display:flex;align-items:center;text-decoration:none">'
         f'<img src="data:image/png;base64,{TOPBAR_LOGO_B64}" alt="MDA" class="topbar-logo">'
         f'<span class="fleet-name">{html.escape(FLEET_NAME)}</span>'
         f'</a>'
+        f'<span class="fleet-subtitle">— {html.escape(_PAGE_SUBTITLES.get(active, ""))}</span>'
         f'</div>'
         f'<nav class="topbar-nav">{links}'
         f'<button class="theme-btn" title="Appearance" onclick="toggleSettings()">&#9881;</button>'
