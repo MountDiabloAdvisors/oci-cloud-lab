@@ -585,7 +585,7 @@ PALETTE_CSS = """
   --c-primary-lt: #3a7a50;
   --c-primary-dk: #1b3f28;
   --c-accent:     #c5a028;
-  --c-topbar:     #2c3440;
+  --c-topbar:     #3d4c5e;
   --c-bg:         #f3f4f6;
   --c-card:       #ffffff;
   --c-text:       #17202a;
@@ -630,8 +630,8 @@ a { color: var(--c-primary); }  a:hover { color: var(--c-primary-lt); }
   background: transparent; border: none; cursor: pointer;
   transition: background .15s, color .15s; }
 .topbar-nav a:hover, .topbar-nav button:hover
-                     { background: rgba(255,255,255,.15); color: #fff; }
-.topbar-nav a.active { background: rgba(255,255,255,.2);  color: #fff; }
+                     { background: rgba(0,0,0,.18); color: #fff; }
+.topbar-nav a.active, .topbar-nav a.active:hover { background: #252e3a; color: #fff; }
 .theme-btn { font-size: 17px; padding: 5px 10px !important; }
 .sign-out  { opacity: .65; }
 
@@ -717,6 +717,7 @@ label { font-size: 13px; color: var(--c-text);
                 text-shadow: 0 1px 3px #0006; transition: border-color .15s, opacity .15s; }
 .palette-btn:hover, .palette-btn.active { border-color: var(--btn-accent, var(--c-accent)); opacity: 1; }
 .palette-btn:not(:hover):not(.active) { opacity: .85; }
+.settings-row { display: flex; align-items: center; padding: 4px 0 12px; font-size: 13px; }
 
 /* login */
 .login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
@@ -969,10 +970,7 @@ def _topbar(active: str = "") -> str:
         ("Fleet",  "/",       "fleet"),
         ("Stats",  "/stats",  "stats"),
         ("Logs",   "/logs",   "logs"),
-        ("Tools",  "/tools",  "tools"),
-        ("Queue",  "/queue",  "queue"),
         ("Export", "/export", "export"),
-        ("Audit",  "/audit",  "audit"),
     ]
     links = " ".join(
         f'<a href="{href}" {_ACT if active == key else ""}>{label}</a>'
@@ -993,12 +991,15 @@ def _topbar(active: str = "") -> str:
         f'<span class="fleet-name">{html.escape(FLEET_NAME)}</span>'
         f'</div>'
         f'<nav class="topbar-nav">{links}'
-        f'<button class="theme-btn" title="Toggle dark/light" onclick="toggleTheme()">'
-        f'<span id="theme-icon">&#127769;</span></button>'
         f'<button class="theme-btn" title="Appearance" onclick="toggleSettings()">&#9881;</button>'
         f'<a href="/logout" class="sign-out">Sign out</a>'
         f'</nav></div>'
         f'<div id="settings-panel" class="settings-panel" hidden>'
+        f'<div class="settings-row">'
+        f'<span>Dark mode</span>'
+        f'<button class="theme-btn" onclick="toggleTheme()" style="margin-left:auto">'
+        f'<span id="theme-icon">&#127769;</span></button>'
+        f'</div>'
         f'<h3>Color palette</h3>'
         f'<div class="palette-grid">{palette_btns}</div>'
         f'</div>'
@@ -1142,6 +1143,9 @@ def fleet_page() -> bytes:
         + f'<p class="section-title">Recent Fleet Events</p>'
         + f'<div>{fleet_events_html()}</div>'
         + '</div>'
+        + '<p style="margin:24px 0 0;font-size:13px;color:var(--c-muted);text-align:center">'
+        + '<a href="/tools">Tools</a> &nbsp;&middot;&nbsp; <a href="/queue">Queue</a> &nbsp;&middot;&nbsp; <a href="/audit">Audit log</a>'
+        + '</p>'
         + '<footer>Auto-refreshes every 60s &nbsp;&middot;&nbsp; management VM</footer>'
         + '</body></html>'
     )
@@ -1257,7 +1261,8 @@ def tools_page(selected_vm: str, fleet_vms: list) -> bytes:
     # Build preset cards — onclick references a JS object keyed by slug.
     # Scripts are stored in JS (not in HTML attributes) to avoid > < " escaping issues.
     preset_cards = "\n".join(
-        f'<div class="payload-card" id="preset-{html.escape(slug)}" onclick="selectPreset({json.dumps(slug)})">'
+        f'<div class="payload-card" id="preset-{html.escape(slug)}"'
+        f' data-slug="{html.escape(slug)}" onclick="selectPreset(this.dataset.slug)">'
         f'<p class="payload-title">{html.escape(label)}</p>'
         f'<p class="payload-desc">{html.escape(desc)}</p>'
         f'</div>'
@@ -1280,7 +1285,7 @@ def tools_page(selected_vm: str, fleet_vms: list) -> bytes:
         + f'The script is sent over SSH and run as bash on the selected VM. '
         + f'Management runs locally.</p>'
         + f'<div class="tools-grid">{preset_cards}'
-        + f'<div class="payload-card" id="preset-custom" onclick="selectPreset(\'custom\')">'
+        + f'<div class="payload-card" id="preset-custom" data-slug="custom" onclick="selectPreset(this.dataset.slug)">'
         + f'<p class="payload-title">Custom script</p>'
         + f'<p class="payload-desc">Write or paste your own bash script. '
         + f'Runs via SSH on any fleet VM.</p>'
@@ -1444,9 +1449,10 @@ def queue_page(fleet_vms: list) -> bytes:
         + _topbar("queue")
         + '<div class="content">'
         + "<p style='font-size:13px;color:var(--c-muted);margin:0 0 16px'>"
-        + "Job queue status across all fleet VMs. Jobs run every 60&thinsp;s via systemd timer. "
-        + "Enqueue via <code>POST /enqueue</code> or directly on each VM with "
-        + "<code>python3 ~/cloud-lab/payload/queue/queue_runner.py --enqueue --label 'X' --command 'bash -c ...'</code>."
+        + "On-demand job queue — tasks submitted via this console or the <code>/enqueue</code> API. "
+        + "&#8220;No jobs&#8221; is normal on a fresh deployment until a job is submitted. "
+        + "Background systemd services are not shown here &#8212; "
+        + "those appear as service chips on the <a href='/'>Fleet</a> page."
         + "</p>"
         + "".join(sections)
         + '</div></body></html>'
@@ -1490,7 +1496,8 @@ def audit_page() -> bytes:
         + _topbar("audit")
         + '<div class="content">'
         + '<p style="font-size:13px;color:var(--c-muted);margin:0 0 16px">'
-        + 'All tool runs, service control actions, and queue enqueue events. '
+        + 'Audit log &#8212; admin actions recorded by this console: script runs, service control, job submissions. '
+        + 'Written to <code>~/cloud-lab/logs/audit.jsonl</code> on the management VM. '
         + 'Last 200 entries shown, newest first.'
         + '</p>'
         + body
