@@ -585,9 +585,10 @@ PALETTE_CSS = """
   --c-primary-lt: #3a7a50;
   --c-primary-dk: #1b3f28;
   --c-accent:     #c5a028;
-  --c-topbar:     #1e3a2a;
-  --c-bg:         #f3f4f6;
-  --c-card:       #ffffff;
+  --c-topbar:      #dce0e6;
+  --c-topbar-text: #1f2937;
+  --c-bg:          #eef4f0;
+  --c-card:        #ffffff;
   --c-text:       #17202a;
   --c-muted:      #64748b;
   --c-border:     #d4e6d9;
@@ -617,21 +618,22 @@ body { font-family: system-ui,-apple-system,sans-serif; margin: 0;
 a { color: var(--c-primary); }  a:hover { color: var(--c-primary-lt); }
 
 /* topbar */
-.topbar { background: var(--c-topbar); color: #fff; padding: 0 20px;
+.topbar { background: var(--c-topbar); color: var(--c-topbar-text, #fff); padding: 0 20px;
           display: flex; align-items: center; justify-content: space-between;
           height: 56px; gap: 12px; }
 .topbar-left  { display: flex; align-items: center; gap: 12px; }
-.topbar-logo  { height: 50px; width: auto; filter: drop-shadow(0 1px 3px rgba(0,0,0,.4)) brightness(1.2); }
-.fleet-name   { font-size: 19px; font-weight: 700; color: #fff; }
+.topbar-logo  { height: 44px; width: auto; margin-bottom: -2px; }
+.fleet-name   { font-size: 19px; font-weight: 700; color: var(--c-topbar-text, #fff); }
 .topbar-nav   { display: flex; align-items: center; gap: 4px; }
 .topbar-nav a, .topbar-nav button {
-  color: rgba(255,255,255,.80); font-size: 14px; font-weight: 500;
+  color: var(--c-topbar-text, #fff); opacity: .80; font-size: 14px; font-weight: 500;
   text-decoration: none; padding: 7px 12px; border-radius: 6px;
   background: transparent; border: none; cursor: pointer;
-  transition: background .15s, color .15s; }
+  transition: background .15s, color .15s, opacity .15s; }
 .topbar-nav a:hover, .topbar-nav button:hover
-                     { background: rgba(0,0,0,.18); color: #fff; }
-.topbar-nav a.active, .topbar-nav a.active:hover { background: #252e3a; color: #fff; }
+                     { background: rgba(0,0,0,.10); opacity: 1; }
+.topbar-nav a.active, .topbar-nav a.active:hover
+                     { background: rgba(0,0,0,.14); opacity: 1; font-weight: 700; }
 .theme-btn { font-size: 17px; padding: 5px 10px !important; }
 .sign-out  { opacity: .65; }
 
@@ -720,19 +722,20 @@ label { font-size: 13px; color: var(--c-text);
 .settings-row { display: flex; align-items: center; padding: 4px 0 12px; font-size: 13px; }
 
 /* login */
-.login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-.login-box  { background: var(--c-card); border: 1px solid var(--c-border);
+.login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh;
+              background: #111820; }
+.login-box  { background: #252d3a; border: 1px solid #3a4557;
               border-radius: 14px; padding: 38px 34px; width: 100%; max-width: 360px;
-              box-shadow: 0 4px 24px #0002; }
+              box-shadow: 0 4px 32px #0004; }
 .login-logo { height: 88px; display: block; margin: 0 auto 18px; }
 .login-box h1   { margin: 0 0 4px; font-size: 22px; text-align: center; }
 .login-box .sub { margin: 0 0 22px; color: var(--c-muted); font-size: 14px; text-align: center; }
 .login-box label { display: block; font-size: 13px; font-weight: 600;
                    margin-bottom: 4px; color: var(--c-muted); }
 .login-box input { width: 100%; padding: 10px 12px; font-size: 15px;
-                   border: 1px solid var(--c-border); border-radius: 8px;
-                   margin-bottom: 14px; background: var(--c-bg);
-                   color: var(--c-text); outline: none; }
+                   border: 1px solid #3a4a5c; border-radius: 8px;
+                   margin-bottom: 14px; background: #1c2433;
+                   color: #e8f0ea; outline: none; }
 .login-box input:focus { border-color: var(--c-primary); box-shadow: 0 0 0 3px rgba(40,94,57,.2); }
 .login-box button { width: 100%; padding: 11px; font-size: 15px; font-weight: 700;
                     background: var(--c-primary); color: #fff; border: none;
@@ -744,18 +747,22 @@ label { font-size: 13px; color: var(--c-text);
               overflow-x: auto; white-space: pre-wrap; color: var(--c-text); }
 footer { text-align: center; font-size: 12px; color: var(--c-muted); padding: 20px 16px; }
 
-/* service chips on VM cards */
+/* service table on VM cards */
 .svc-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--c-border); }
 .svc-label   { font-size: 11px; color: var(--c-muted); font-weight: 600; margin: 0 0 6px;
                text-transform: uppercase; letter-spacing: .4px; }
-.svc-chips   { display: flex; flex-wrap: wrap; gap: 5px; }
-.svc-chip    { font-size: 11px; padding: 2px 9px; border-radius: 5px; text-decoration: none;
-               background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-muted);
-               transition: background .12s, color .12s; }
-.svc-chip:hover { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
-.svc-chip-row  { display: flex; align-items: center; gap: 3px; }
-.svc-ctl { font-size: 10px; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--c-border);
-           background: var(--c-bg); color: var(--c-muted); cursor: pointer; line-height: 1.5;
+.svc-table   { width: 100%; border-collapse: collapse; font-size: 12px; }
+.svc-table th { font-size: 10px; color: var(--c-muted); font-weight: 600; text-align: left;
+                padding: 0 6px 3px; text-transform: uppercase; letter-spacing: .3px; }
+.svc-table th:last-child { text-align: right; }
+.svc-table td { padding: 3px 6px; border-top: 1px solid var(--c-border); vertical-align: middle; }
+.svc-table tr:first-child td { border-top: none; }
+.svc-table td:last-child { text-align: right; white-space: nowrap; }
+.svc-link  { font-size: 12px; text-decoration: none; color: var(--c-primary);
+             transition: color .12s; }
+.svc-link:hover { text-decoration: underline; }
+.svc-ctl { font-size: 11px; padding: 1px 7px; border-radius: 4px; border: 1px solid var(--c-border);
+           background: var(--c-bg); color: var(--c-muted); cursor: pointer; line-height: 1.6;
            transition: background .12s, color .12s; }
 .svc-ctl:hover { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
 .svc-ctl.stop:hover { background: #dc2626; border-color: #dc2626; }
@@ -897,8 +904,8 @@ PALETTE_PRESETS = [
     # theme is 'light' or 'dark'; applyPalette forces data-theme to match.
     ("MDA Green", "#1e3a2a", "light", {
         "--c-primary": "#285e39", "--c-primary-lt": "#3a7a50", "--c-primary-dk": "#1b3f28",
-        "--c-accent": "#c5a028", "--c-topbar": "#1e3a2a",
-        "--c-bg": "#f3f4f6", "--c-card": "#ffffff", "--c-border": "#d4e6d9",
+        "--c-accent": "#c5a028", "--c-topbar": "#dce0e6", "--c-topbar-text": "#1f2937",
+        "--c-bg": "#eef4f0", "--c-card": "#ffffff", "--c-border": "#d4e6d9",
         "--c-text": "#17202a", "--c-muted": "#64748b",
     }),
     ("Ocean", "#0f2547", "light", {
@@ -1046,21 +1053,23 @@ def _topbar(active: str = "") -> str:
 
 
 
-def _svc_chip(name: str, svc: str, label: str) -> str:
-    """Build HTML for a single service chip + control buttons."""
+def _svc_row(name: str, svc: str, label: str) -> str:
+    """Build an HTML table row for a single service."""
     vm_h  = html.escape(name)
     svc_h = html.escape(svc)
     lbl_h = html.escape(label)
     return (
-        f'<div class="svc-chip-row">'
-        f'<a class="svc-chip" href="/logs?vm={vm_h}&service={svc_h}">{lbl_h}</a>'
+        f'<tr>'
+        f'<td><a class="svc-link" href="/logs?vm={vm_h}&service={svc_h}">{lbl_h}</a></td>'
+        f'<td>'
         f'<button class="svc-ctl" title="restart" data-vm="{vm_h}" data-svc="{svc_h}"'
-        f' onclick="svcCtl(this.dataset.vm,this.dataset.svc,&apos;restart&apos;)">&#x21BA;</button>'
-        f'<button class="svc-ctl stop" title="stop" data-vm="{vm_h}" data-svc="{svc_h}"'
-        f' onclick="svcCtl(this.dataset.vm,this.dataset.svc,&apos;stop&apos;)">&#x25A0;</button>'
-        f'<button class="svc-ctl" title="start" data-vm="{vm_h}" data-svc="{svc_h}"'
-        f' onclick="svcCtl(this.dataset.vm,this.dataset.svc,&apos;start&apos;)">&#x25BA;</button>'
-        f'</div>'
+        f' onclick="svcCtl(this.dataset.vm,this.dataset.svc,&apos;restart&apos;)">&#x21BA; Restart</button>'
+        f' <button class="svc-ctl stop" title="stop" data-vm="{vm_h}" data-svc="{svc_h}"'
+        f' onclick="svcCtl(this.dataset.vm,this.dataset.svc,&apos;stop&apos;)">&#x25A0; Stop</button>'
+        f' <button class="svc-ctl" title="start" data-vm="{vm_h}" data-svc="{svc_h}"'
+        f' onclick="svcCtl(this.dataset.vm,this.dataset.svc,&apos;start&apos;)">&#x25BA; Start</button>'
+        f'</td>'
+        f'</tr>'
     )
 
 # ── VM cards ──────────────────────────────────────────────────────────────────
@@ -1129,14 +1138,14 @@ def vm_cards() -> str:
         ]
         svc_html = ""
         if services:
-            chips = " ".join(
-                _svc_chip(name, svc, label)
-                for svc, label in services
-            )
+            rows = "".join(_svc_row(name, svc, label) for svc, label in services)
             svc_html = (
                 f'<div class="svc-section">'
                 f'<p class="svc-label">Background services</p>'
-                f'<div class="svc-chips">{chips}</div>'
+                f'<table class="svc-table">'
+                f'<thead><tr><th>Service</th><th>Actions</th></tr></thead>'
+                f'<tbody>{rows}</tbody>'
+                f'</table>'
                 f'</div>'
             )
 
