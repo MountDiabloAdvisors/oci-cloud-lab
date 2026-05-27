@@ -1485,7 +1485,7 @@ def login_page(error: bool = False, locked: bool = False) -> bytes:
         + f'<div class="login-wrap"><div class="login-box">'
         + f'<img src="data:image/png;base64,{TOPBAR_LOGO_B64}" alt="MDA" class="login-logo">'
         + f'<h1>{html.escape(FLEET_NAME)}</h1>'
-        + '<p class="sub">Private admin console</p>'
+        + '<p class="sub">Admin Dashboard</p>'
         + f'{err}'
         + '<form method="POST" action="/login">'
         + '<label for="u">Username</label>'
