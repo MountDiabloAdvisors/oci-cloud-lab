@@ -440,10 +440,17 @@ def _mgmt_tls_html() -> str:
         Path("/var/lib/caddy/.local/share/caddy/certificates"),
         Path("/etc/caddy/certificates"),
     ]:
-        if cert_root.exists():
-            for crt in sorted(cert_root.rglob("*.crt"), key=lambda p: p.stat().st_mtime, reverse=True):
-                cert_file = crt
-                break
+        try:
+            root_exists = cert_root.exists()
+        except PermissionError:
+            root_exists = False
+        if root_exists:
+            try:
+                for crt in sorted(cert_root.rglob("*.crt"), key=lambda p: p.stat().st_mtime, reverse=True):
+                    cert_file = crt
+                    break
+            except PermissionError:
+                pass
         if cert_file:
             break
     if cert_file:
