@@ -497,11 +497,11 @@ def _update_quota_cache() -> None:
     compartment_id = env.get("OCI_COMPARTMENT_ID", "")
     if not compartment_id:
         return
-    # Always Free hard-coded maximums — stable since 2021, used as fallback.
+    # Always Free hard-coded maximums — updated June 2026 after Oracle halved A1 quota.
     _AF_MAX = {
         "E2.Micro VMs": 2,
-        "A1 OCPUs":     4,
-        "A1 RAM (GB)":  24,
+        "A1 OCPUs":     2,
+        "A1 RAM (GB)":  12,
     }
     limits = {}
     for limit_name, label in [
@@ -642,7 +642,7 @@ a { color: var(--c-primary); }  a:hover { color: var(--c-primary-lt); }
 .topbar { background: var(--c-topbar); color: var(--c-topbar-text, #fff); padding: 0 20px 0 0;
           display: flex; align-items: center; justify-content: space-between;
           height: 56px; gap: 12px; }
-.topbar-left  { display: flex; align-items: center; gap: 0; padding-left: 14px; }
+.topbar-left  { display: flex; align-items: center; gap: 0; padding-left: 10px; }
 .topbar-logo  { height: 44px; width: auto; margin-bottom: -2px; }
 .fleet-name   { font-size: 17px; font-weight: 600; color: var(--c-topbar-text, #fff);
                 padding-left: 10px; }
