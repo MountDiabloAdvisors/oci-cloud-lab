@@ -159,7 +159,7 @@ Three VMs, two shapes — all within Oracle's Always Free tier:
 ```
 management   VM.Standard.E2.1.Micro   Orchestrator · admin console · heartbeat · crosswatch
 worker       VM.Standard.E2.1.Micro   A1 lottery runner · general compute while waiting
-laboratory   VM.Standard.A1.Flex      4 OCPU / 24 GB RAM — MDA dashboard host
+laboratory   VM.Standard.A1.Flex      2 OCPU / 12 GB RAM — MDA dashboard host
 ```
 
 VM configuration is in `fleet.json` (committed, safe to edit). Role-specific
