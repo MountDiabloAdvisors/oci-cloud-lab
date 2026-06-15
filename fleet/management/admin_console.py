@@ -1479,7 +1479,12 @@ def tools_page(selected_vm: str, fleet_vms: list) -> bytes:
         + f'<button class="btn" id="run-btn" onclick="runPayload()">&#9654; Run on VM</button>'
         + f'<span id="run-status" style="font-size:13px;color:var(--c-muted)"></span>'
         + f'</div>'
-        + f'<p class="section-title" id="output-title" style="display:none">Output</p>'
+        + f'<div id="output-title" style="display:none;justify-content:space-between;align-items:center;margin-bottom:6px">'
+        + f'<p class="section-title" style="margin:0">Output</p>'
+        + f'<button id="copy-btn" onclick="copyOutput()" style="font-size:12px;padding:3px 10px;'
+        + f'border:1px solid var(--c-border);border-radius:4px;background:var(--c-bg);'
+        + f'color:var(--c-text);cursor:pointer">&#x2398; Copy</button>'
+        + f'</div>'
         + f'<pre id="output-pre" style="display:none"></pre>'
         + f'</div>'
         + "<script>"
@@ -1515,12 +1520,19 @@ def tools_page(selected_vm: str, fleet_vms: list) -> bytes:
         + "    status.style.color = d.exit_code === 0 ? 'var(--c-ok-text)' : 'var(--c-err-text)';"
         + "    var pre = document.getElementById('output-pre');"
         + "    pre.textContent = d.output || '(no output)';"
-        + "    document.getElementById('output-title').style.display = '';"
+        + "    document.getElementById('output-title').style.display = 'flex';"
         + "    pre.style.display = '';"
         + "  }).catch(function(e) {"
         + "    btn.disabled = false; btn.textContent = '▶ Run on VM';"
         + "    status.textContent = 'Request failed: ' + e.message;"
         + "    status.style.color = 'var(--c-err-text)';"
+        + "  });"
+        + "}"
+        + "function copyOutput() {"
+        + "  navigator.clipboard.writeText(document.getElementById('output-pre').textContent)"
+        + "  .then(function() {"
+        + "    var b = document.getElementById('copy-btn');"
+        + "    b.textContent = '✓ Copied'; setTimeout(function() { b.textContent = '⎘ Copy'; }, 1500);"
         + "  });"
         + "}"
         + "</script>"
