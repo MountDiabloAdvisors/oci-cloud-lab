@@ -1912,8 +1912,13 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/heartbeat":
             if not _is_heartbeat_authed(self):
                 self._respond(403, b'{"ok":false}'); return
-            data = self._read_json_body(MAX_HEARTBEAT_BODY)
-            if data is None:
+            if length > MAX_HEARTBEAT_BODY:
+                self._respond(413, b'{"ok":false}'); return
+            try:
+                data = json.loads(body) if body else {}
+                if not isinstance(data, dict):
+                    raise ValueError
+            except Exception:
                 self._respond(400, b'{"ok":false}'); return
             sender = str(data.get("vm_name") or data.get("vm") or "unknown")[:64]
             now    = datetime.now(timezone.utc).isoformat()
