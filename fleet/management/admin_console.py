@@ -1955,6 +1955,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args): return
 
+    def handle_error(self, request, client_address):
+        import sys
+        if issubclass(sys.exc_info()[0], (BrokenPipeError, ConnectionResetError)):
+            return
+        super().handle_error(request, client_address)
+
 
 if __name__ == "__main__":
     load_heartbeats()
