@@ -3,22 +3,27 @@
 Push rotated secrets from the local .env out to the live fleet.
 
 Usage:
-    python admin/rotate_secrets.py              # push GITHUB_TOKEN + admin password
-    python admin/rotate_secrets.py --token      # token only
-    python admin/rotate_secrets.py --password   # admin password only
-    python admin/rotate_secrets.py --dry-run    # show what would change, touch nothing
+    python admin/rotate_secrets.py                  # push every secret present in .env
+    python admin/rotate_secrets.py --token          # GITHUB_TOKEN only
+    python admin/rotate_secrets.py --password       # admin console password only
+    python admin/rotate_secrets.py --queue-key      # QUEUE_API_KEY only
+    python admin/rotate_secrets.py --heartbeat      # FLEET_HEARTBEAT_TOKEN only
+    python admin/rotate_secrets.py --dry-run        # report only, change nothing
+    python admin/rotate_secrets.py --no-restart     # update files, skip service restarts
 
-Reads the new values from .env and updates, on each live VM:
-  - ~/.config/cloud-lab/{role}.env          (GITHUB_TOKEN, ADMIN_PASSWORD_HASH)
-  - ~/cloud-lab/.git/config                 (token embedded in the clone URL by cloud-init)
-then restarts that VM's cloud-lab services.
+Rotating a secret means updating every copy of it, not just the one in .env.
+For each reachable VM this updates:
+  - ~/.config/cloud-lab/{role}.env      the role's environment file
+  - ~/cloud-lab/.git/config             the token cloud-init baked into the clone URL
+then restarts that role's cloud-lab services.
 
 Secret values are never printed and never passed as command-line arguments
 (argv is world-readable via `ps` on the remote host). They are embedded in a
 script piped to the remote over stdin.
 
-The worker is not reachable from the laptop — it only trusts management's
-fleet.key — so worker updates hop through management.
+Reachability: only management is reachable from the laptop with your admin key.
+Worker and laboratory trust management's fleet.key, so their updates hop
+through management. A VM with no configured private IP is skipped.
 """
 
 from __future__ import annotations
@@ -35,30 +40,37 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = REPO_ROOT / ".env"
 
-MANAGEMENT_ROLE = "management"
-WORKER_ROLE = "worker"
+# Which secrets belong on which role. The console password and queue API key
+# only mean anything on management, which is the only role serving the console.
+ROLE_SECRETS = {
+    "management": ["GITHUB_TOKEN", "ADMIN_PASSWORD_HASH", "QUEUE_API_KEY",
+                   "FLEET_HEARTBEAT_TOKEN"],
+    "worker":     ["GITHUB_TOKEN", "FLEET_HEARTBEAT_TOKEN"],
+    "laboratory": ["GITHUB_TOKEN", "FLEET_HEARTBEAT_TOKEN"],
+}
 
-# Services to restart per role after secrets change. The console is restarted
-# last on management so it is not killed mid-update.
+# Services restarted per role. The console is last on management so it is not
+# killed mid-update.
 ROLE_SERVICES = {
-    MANAGEMENT_ROLE: [
-        "cloud-lab-orchestrator",
-        "cloud-lab-heartbeat",
-        "cloud-lab-crosswatch",
-        "cloud-lab-console",
-    ],
-    WORKER_ROLE: [
-        "cloud-lab-a1-lottery",
-        "cloud-lab-heartbeat",
-        "cloud-lab-crosswatch",
-    ],
+    "management": ["cloud-lab-orchestrator", "cloud-lab-heartbeat",
+                   "cloud-lab-crosswatch", "cloud-lab-console"],
+    "worker":     ["cloud-lab-a1-lottery", "cloud-lab-heartbeat",
+                   "cloud-lab-crosswatch", "cloud-lab-keepalive"],
+    "laboratory": ["cloud-lab-heartbeat", "cloud-lab-crosswatch",
+                   "cloud-lab-keepalive"],
+}
+
+# Private-IP env key per non-management role.
+ROLE_IP_KEY = {
+    "worker": "FLEET_WORKER_PRIVATE_IP",
+    "laboratory": "FLEET_LABORATORY_PRIVATE_IP",
 }
 
 
 def load_env(path: Path) -> dict[str, str]:
     """Parse a KEY=VALUE .env file. Values are never logged."""
     if not path.exists():
-        sys.exit(f"ERROR: {path} not found.")
+        sys.exit(f"ERROR: {path} not found. Copy .env.example to .env first.")
     env: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -76,22 +88,35 @@ def hash_password(password: str) -> str:
     return f"sha256:260000:{salt}:{h}"
 
 
+def normalize_repo(value: str) -> str:
+    """
+    Reduce any accepted FLEET_REPO spelling to `owner/repo`.
+
+    cloud-init builds https://oauth2:<token>@github.com/${FLEET_REPO}.git, so the
+    owner/repo form is what the clone URL needs — but users paste SSH and HTTPS
+    URLs too.
+    """
+    value = value.strip()
+    value = re.sub(r"^git@github\.com:", "", value)
+    value = re.sub(r"^https://(?:[^@]+@)?github\.com/", "", value)
+    value = re.sub(r"\.git$", "", value)
+    return value.strip("/")
+
+
 def build_remote_script(role: str, updates: dict[str, str], repo: str,
                         token: str | None, restart: bool) -> str:
     """
     Build the bash script executed on the remote host.
 
     Values are interpolated as Python reprs into a python3 heredoc, so quoting,
-    special characters and shell metacharacters in a password hash or token
-    cannot break out. Nothing here echoes a value.
+    special characters and shell metacharacters in a hash or token cannot break
+    out of the string. Nothing here echoes a value.
     """
     env_path = f"$HOME/.config/cloud-lab/{role}.env"
     pairs = ", ".join(f"{k!r}: {v!r}" for k, v in updates.items())
 
     git_fix = ""
-    if token:
-        # cloud-init cloned with https://oauth2:<token>@github.com/<repo>.git —
-        # rewrite the stored remote so `git pull` uses the new token.
+    if token and repo:
         new_url = f"https://oauth2:{token}@github.com/{repo}.git"
         git_fix = f"""
 if [ -d "$HOME/cloud-lab/.git" ]; then
@@ -106,8 +131,7 @@ fi
         services = " ".join(ROLE_SERVICES.get(role, []))
         restart_block = f"""
 for svc in {services}; do
-    if systemctl list-unit-files "$svc.service" >/dev/null 2>&1 && \\
-       systemctl cat "$svc.service" >/dev/null 2>&1; then
+    if systemctl cat "$svc.service" >/dev/null 2>&1; then
         sudo systemctl restart "$svc" && echo "OK   restarted $svc" || echo "FAIL restart $svc"
     else
         echo "SKIP $svc not installed"
@@ -115,13 +139,17 @@ for svc in {services}; do
 done
 """
 
+    # The backup is best-effort: on some fleets ~/.config/cloud-lab is root-owned
+    # even though the env file inside is writable, so a failed copy must not abort
+    # the update.
     return f"""set -u
 ENV_FILE="{env_path}"
 if [ ! -f "$ENV_FILE" ]; then
     echo "FAIL $ENV_FILE missing"
     exit 1
 fi
-cp "$ENV_FILE" "$ENV_FILE.bak.$(date +%s)"
+cp "$ENV_FILE" "$ENV_FILE.bak.$(date +%s)" 2>/dev/null \\
+    || echo "WARN could not write backup (directory not writable); continuing"
 
 python3 - "$ENV_FILE" <<'PYEOF'
 import sys
@@ -165,7 +193,7 @@ def run_remote(ssh_target: str, key_path: str, script: str,
     Pipe `script` to bash on the remote host over stdin.
 
     hop = (inner_user_host, inner_key) routes through ssh_target to a second
-    host, with stdin passing straight through both legs.
+    host; stdin passes straight through both legs.
     """
     if hop:
         inner_host, inner_key = hop
@@ -191,85 +219,116 @@ def run_remote(ssh_target: str, key_path: str, script: str,
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Push rotated secrets to the fleet.")
-    parser.add_argument("--token", action="store_true", help="push GITHUB_TOKEN only")
-    parser.add_argument("--password", action="store_true", help="push admin password only")
+    parser = argparse.ArgumentParser(
+        description="Push rotated secrets from .env to the live fleet.")
+    parser.add_argument("--token", action="store_true", help="GITHUB_TOKEN only")
+    parser.add_argument("--password", action="store_true", help="admin password only")
+    parser.add_argument("--queue-key", action="store_true", help="QUEUE_API_KEY only")
+    parser.add_argument("--heartbeat", action="store_true", help="FLEET_HEARTBEAT_TOKEN only")
     parser.add_argument("--dry-run", action="store_true", help="report only, change nothing")
     parser.add_argument("--no-restart", action="store_true", help="skip service restarts")
     args = parser.parse_args()
 
-    do_token = args.token or not (args.token or args.password)
-    do_password = args.password or not (args.token or args.password)
+    selective = any([args.token, args.password, args.queue_key, args.heartbeat])
+    want = {
+        "GITHUB_TOKEN": args.token or not selective,
+        "ADMIN_PASSWORD_HASH": args.password or not selective,
+        "QUEUE_API_KEY": args.queue_key or not selective,
+        "FLEET_HEARTBEAT_TOKEN": args.heartbeat or not selective,
+    }
 
     env = load_env(ENV_FILE)
 
     key_path = os.path.expandvars(
-        env.get("OCI_SSH_PRIVATE_KEY_PATH", "%USERPROFILE%\\.ssh\\oracle_mda.key")
-    )
+        env.get("OCI_SSH_PRIVATE_KEY_PATH", "~/.ssh/fleet.key")).replace("~", str(Path.home()), 1)
     ssh_user = env.get("OCI_SSH_USER", "ubuntu")
     mgmt_host = env.get("OCI_MANAGEMENT_HOST", "").strip()
-    repo = env.get("FLEET_REPO", "").strip()
+    repo = normalize_repo(env.get("FLEET_REPO", ""))
 
     if not mgmt_host:
-        sys.exit("ERROR: OCI_MANAGEMENT_HOST not set in .env")
+        sys.exit("ERROR: OCI_MANAGEMENT_HOST not set in .env — launch management first.")
 
-    token = env.get("GITHUB_TOKEN", "").strip() if do_token else None
-    if do_token and not token:
-        sys.exit("ERROR: GITHUB_TOKEN is empty in .env")
-    if do_token and not re.match(r"^(github_pat_|ghp_)", token or ""):
-        sys.exit("ERROR: GITHUB_TOKEN does not look like a GitHub token")
+    # Resolve the actual values once. Anything absent from .env is skipped rather
+    # than pushed as an empty string, which would silently disable a feature.
+    values: dict[str, str] = {}
 
-    pw_hash = None
-    if do_password:
-        password = env.get("ADMIN_PASSWORD", "")
-        if not password:
-            sys.exit("ERROR: ADMIN_PASSWORD is empty in .env")
-        pw_hash = hash_password(password)
+    if want["GITHUB_TOKEN"]:
+        token = env.get("GITHUB_TOKEN", "").strip()
+        if not token:
+            if args.token:
+                sys.exit("ERROR: GITHUB_TOKEN is empty in .env")
+        elif not re.match(r"^(github_pat_|ghp_|gho_)", token):
+            sys.exit("ERROR: GITHUB_TOKEN does not look like a GitHub token")
+        else:
+            values["GITHUB_TOKEN"] = token
 
-    print(f"Fleet secret rotation — repo {repo}")
-    print(f"  token:    {'yes' if do_token else 'no'}")
-    print(f"  password: {'yes' if do_password else 'no'}")
+    if want["ADMIN_PASSWORD_HASH"]:
+        existing = env.get("ADMIN_PASSWORD_HASH", "").strip()
+        password = env.get("ADMIN_PASSWORD", "").strip()
+        if password:
+            # Plaintext present: it is the source of truth, rehash it.
+            values["ADMIN_PASSWORD_HASH"] = hash_password(password)
+        elif existing:
+            values["ADMIN_PASSWORD_HASH"] = existing
+        elif args.password:
+            sys.exit("ERROR: neither ADMIN_PASSWORD nor ADMIN_PASSWORD_HASH set in .env")
+
+    for key in ("QUEUE_API_KEY", "FLEET_HEARTBEAT_TOKEN"):
+        if want[key]:
+            value = env.get(key, "").strip()
+            if value:
+                values[key] = value
+            elif selective:
+                sys.exit(f"ERROR: {key} is empty in .env")
+
+    if not values:
+        sys.exit("ERROR: nothing to push — no matching secrets are set in .env.")
+
+    token_value = values.get("GITHUB_TOKEN")
+
+    # Roles to visit: management directly, others only if a private IP is known.
+    targets: list[tuple[str, tuple[str, str] | None]] = [("management", None)]
+    for role, ip_key in ROLE_IP_KEY.items():
+        ip = env.get(ip_key, "").strip()
+        if ip:
+            targets.append((role, (f"{ssh_user}@{ip}", "~/.ssh/fleet.key")))
+        else:
+            print(f"NOTE: {role} skipped — {ip_key} not set in .env")
+
+    print(f"\nFleet secret rotation — repo {repo or '(FLEET_REPO unset)'}")
+    print(f"  pushing: {', '.join(sorted(values))}")
+    print(f"  targets: {', '.join(role for role, _ in targets)}")
+
     if args.dry_run:
         print("\nDRY RUN — nothing will be changed.")
-        print(f"  would update {ssh_user}@{mgmt_host}:~/.config/cloud-lab/management.env")
-        print(f"  would update worker (via management):~/.config/cloud-lab/worker.env")
+        for role, hop in targets:
+            applicable = [k for k in ROLE_SECRETS[role] if k in values]
+            via = " (via management)" if hop else ""
+            print(f"  {role}{via}: would set {', '.join(applicable) or '(nothing applicable)'}")
         return
 
     restart = not args.no_restart
     failures = 0
 
-    # ---- management -------------------------------------------------------
-    mgmt_updates: dict[str, str] = {}
-    if do_token:
-        mgmt_updates["GITHUB_TOKEN"] = token  # type: ignore[assignment]
-    if do_password:
-        mgmt_updates["ADMIN_PASSWORD_HASH"] = pw_hash  # type: ignore[assignment]
+    for role, hop in targets:
+        updates = {k: v for k, v in values.items() if k in ROLE_SECRETS[role]}
+        if not updates:
+            print(f"\n[{role}] nothing applicable — skipped")
+            continue
 
-    print(f"\n[management] {mgmt_host}")
-    script = build_remote_script(MANAGEMENT_ROLE, mgmt_updates, repo, token, restart)
-    if run_remote(f"{ssh_user}@{mgmt_host}", key_path, script) != 0:
-        failures += 1
-        print("    ERROR: management update failed")
-
-    # ---- worker (hop through management) ----------------------------------
-    # The worker never serves the admin console, so it only needs the token.
-    if do_token:
-        worker_ip = env.get("FLEET_WORKER_PRIVATE_IP", "10.0.0.251").strip()
-        print(f"\n[worker] {worker_ip} (via management)")
-        script = build_remote_script(WORKER_ROLE, {"GITHUB_TOKEN": token},  # type: ignore[dict-item]
-                                     repo, token, restart)
-        rc = run_remote(
-            f"{ssh_user}@{mgmt_host}", key_path, script,
-            hop=(f"{ssh_user}@{worker_ip}", "~/.ssh/fleet.key"),
-        )
+        via = " (via management)" if hop else ""
+        print(f"\n[{role}] {hop[0].split('@')[1] if hop else mgmt_host}{via}")
+        script = build_remote_script(role, updates, repo, token_value, restart)
+        rc = run_remote(f"{ssh_user}@{mgmt_host}", key_path, script, hop=hop)
         if rc != 0:
             failures += 1
-            print("    ERROR: worker update failed")
+            print(f"    ERROR: {role} update failed")
 
     print()
     if failures:
         sys.exit(f"{failures} host(s) failed — see output above.")
-    print("All hosts updated. No secret values were printed.")
+    print("All reachable hosts updated. No secret values were printed.")
+    print("Verify with:  ssh <management> 'cd ~/cloud-lab && git ls-remote origin HEAD'")
 
 
 if __name__ == "__main__":
