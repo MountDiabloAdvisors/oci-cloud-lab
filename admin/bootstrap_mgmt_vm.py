@@ -143,7 +143,6 @@ patch_key OCI_AUTH_MODE                instance_principal
 patch_key OCI_COMPARTMENT_ID           {compartment}
 patch_key OCI_SUBNET_ID                {subnet}
 patch_key NOTIFY_NTFY_TOPIC            {ntfy}
-patch_key GITHUB_TOKEN                 {token}
 patch_key FLEET_REPO                   {repo}
 patch_key FLEET_NAME                   {fleet_name}
 patch_key FLEET_VM_NAME                management
@@ -156,6 +155,9 @@ patch_key OCI_SSH_USER                 ubuntu
 force_key FLEET_MANAGEMENT_PRIVATE_IP  "$MGMT_PRIVATE_IP"
 force_key ADMIN_USERNAME               {admin_user}
 force_key ADMIN_PASSWORD_HASH          {pw_hash}
+# GITHUB_TOKEN is forced: a renewed/rotated token must overwrite the stale one,
+# otherwise patch_key silently keeps the dead value and git pull breaks.
+force_key GITHUB_TOKEN                 {token}
 
 echo "[bootstrap] Running role setup..."
 TOOLS_DIR="$HOME/cloud-lab" bash "$HOME/cloud-lab/fleet/management/setup.sh"
